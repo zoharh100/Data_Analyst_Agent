@@ -1,0 +1,452 @@
+0:  סוכן דאטה אנליסט
+1: שלב 1: בניית הכלים של הסוכן (Tools) – הפונקציות שמאפשרות לו "לגעת" במידע.
+2: שלב 2: כתיבת ה-System Prompt (המוח והתכנון) הכולל את 6 הרכיבים המחייבים.
+3: שלב 3: הקמת קובץ נתונים מדומה לטובת בדיקות.
+4: שלב 4: כתיבת לולאת הסוכן (The Agent Loop) המחברת בין החשיבה לכלים
+5: שלב 5: בניית דשבורד 
+7: שלב 1: בניית הכלים של הסוכן (Tools)
+8: כדי לעמוד בדרישות הציון של הפרויקט, עלינו לכלול לפחות 2 כלים. מכיוון שבחרת בסוכן ניתוח נתונים, הכלים האלו ייכתבו כפונקציות Python. חשוב שכל כלי יחזיר בסוף התהליך מחרוזת טקסט (String), כדי שמודל השפה יוכל לקרוא ולהבין את התוצאה.
+9: ניצור שני כלים מרכזיים:
+10: כלי סריקת מבנה הנתונים (read_dataset_schema): כלי שמקבל את נתיב הקובץ ומחזיר את שמות העמודות וסוגי הנתונים. השימוש בכלי זה מונע מהסוכן להציף את חלון ההקשר שלו (Context Window) בכל תוכן הקובץ, ומאפשר לו להבין רק את המבנה.
+11: מנוע הרצת קוד (run_python_analysis): כלי המריץ קוד פייתון שהסוכן כותב (כמו חישובים סטטיסטיים) ומחזיר את התוצאה. אנו נעטוף את הרצת הקוד בתוך בלוק של try-except. בצורה זו, אם הסוכן עושה טעות וכותב קוד שגוי, הכלי יחזיר לו את השגיאה המדויקת של Python (בתור Observation). כך אנו מקנים לסוכן יכולת תיקון עצמי (Self-Correction) כדי שיתקן את עצמו בשלב הבא
+12: import pandas as pd
+14: def read_dataset_schema(file_path):
+15:     try:
+16:         # קריאת הקובץ ושליפת סוגי העמודות וטעימה קטנה מהנתונים
+17:         df = pd.read_csv(file_path)
+18:         schema_info = f"Columns and Data types:\n{df.dtypes}\n\nFirst 5 rows:\n{df.head()}"
+19:         return str(schema_info)
+20:     except Exception as e:
+21:         return f"Error reading file: {str(e)}"
+23: def run_python_analysis(code_string):
+24:     try:
+25:         # הרצת קוד הפייתון שהסוכן מייצר באמצעות exec
+26:         local_vars = {}
+27:         exec(code_string, globals(), local_vars)
+29:         # כדי לקבל תשובה, נצפה שהסוכן ישמור את התוצאה שלו במשתנה בשם 'result'
+30:         if 'result' in local_vars:
+31:             return str(local_vars['result'])
+32:         else:
+33:             return "Code executed successfully. Note: Save your final answer in a variable named 'result'."
+35:     except Exception as e:
+36:         # מנגנון תיקון עצמי: החזרת השגיאה לסוכן
+37:         return f"Python Error: {str(e)}"
+40: שלב 2: 
+41: פתח את סביבת הפיתוח שלך, צור קובץ חדש בשם agent_prompts.py, והדבק בתוכו את מחרוזת הפרומפט הבאה. מחרוזת זו תשמש אותנו בהמשך כשנבנה את הלולאה המרכזית של הסוכן.
+43: SYSTEM_PROMPT = """
+44: <Persona>
+45: You are an expert Data Analyst AI capable of writing accurate Python code.
+46: </Persona>
+48: <Goal>
+49: Your goal is to explore datasets, run statistical calculations, and produce a concise report and business insights for managers.
+50: </Goal>
+52: <Tools>
+53: You have the following tools at your disposal:
+54: 1. read_dataset_schema(file_path): Returns column names, data types, and a small sample.
+55: 2. run_python_analysis(code_string): Executes python code and returns the result. Save your final answer in a variable named 'result'.
+57: You must use these tools to get information about the file; you are strictly forbidden from guessing data.
+58: </Tools>
+60: <Process>
+61: You must work in a fixed ReAct loop. In each iteration, you must output:
+62: Thought: Explain what you plan to calculate and why.
+63: Action: The name of the tool to use and its arguments.
+64: Observation: Wait for the tool's result.
+65: Repeat this cycle until you can formulate the final insights.
+66: </Process>
+68: <Constraints>
+69: - Do not try to print the entire file to the chat context window.
+70: - Self-Correction: If your Python code fails and returns an error, you must use the error output to fix the code and try again.
+71: - Max Iterations: You are limited to a maximum of 10 thought/action cycles.
+72: </Constraints>
+74: <Output Format>
+75: At the end of the process, return an executive summary in the following structure:
+76: 1. Data Structure Overview
+77: 2. Key Findings (statistics, trends)
+78: 3. Actionable Recommendations for the manager
+79: </Output Format>
+80: """
+82: מה קורה כאן ומדוע זה בנוי כך?
+83: הקוד שהדבקת מיישם הלכה למעשה את הארכיטקטורה של הסוכן כפי שלמדנו בכיתה:
+84: ששת הרכיבים המחייבים: הפרומפט מורכב במדויק מכל חלקי הליבה: הגדרת פרסונה של אנליסט נתונים , יעד להפקת תובנות ודוחות , ציון הכלים תוך איסור על ניחוש נתונים , הגדרת תהליך מחזורי של לולאת ReAct , והגדרת פורמט מדויק להצגת סיכום מנהלים, ממצאים והמלצות.
+85: מנגנון תיקון עצמי (Self-Correction): תחת סעיף האילוצים, הגדרנו כי במקרה של כישלון קוד ה-Python, המודל מחויב לקרוא את השגיאה שחוזרת אליו ולתקן את עצמו. ההנחיה הזו מכריחה את הסוכן להתמודד נכון עם שגיאות ריצה.
+86: מניעת לולאה אינסופית: קבענו גבול מקסימלי קשיח של 10 סבבים לכל היותר עבור תהליך החשיבה. הגבלה זו נועדה למנוע קריסה בלולאה אינסופית ולמנוע בזבוז מיותר של טוקנים
+89: שלב 3: 
+90: די שהסוכן (ובהמשך גם דשבורד ה-BI בשלב 5) יקבלו נתונים מעניינים לעבוד איתם, נייצר קובץ נתונים מדומה לעסק של הזמנות עוגות וקונדיטוריה בהתאמה אישית. סוג המידע הזה מצוין לבדיקות משום שהוא משלב נתונים מספריים (תמחור, עלויות חומרי גלם), נתוני זמן, וטקסט חופשי (הערות לקוח) שהסוכן המלאכותי יוכל לנתח ולהפעיל עליו את הכלים שלו.
+91: מבנה הנתונים (Mock Data)
+92: הכנתי את הנתונים בפורמט JSON, שהוא הפורמט הנפוץ והנוח ביותר לעבודה של סוכני AI (וגם קל מאוד לטעינה ב-Python ו-SQL בהמשך).
+93: [
+94:   {
+95:     "order_id": 1001,
+96:     "order_date": "2026-06-15",
+97:     "product_type": "עוגת שוקולד קומותיים",
+98:     "ingredients_cost": 120.50,
+99:     "final_price": 350.00,
+100:     "status": "Delivered",
+101:     "customer_notes": "ללא גלוטן, נא לכתוב 'מזל טוב לדני'"
+102:   },
+103:   {
+104:     "order_id": 1002,
+105:     "order_date": "2026-06-16",
+106:     "product_type": "מארז קאפקייקס מעוצב",
+107:     "ingredients_cost": 45.00,
+108:     "final_price": 180.00,
+109:     "status": "In Progress",
+110:     "customer_notes": "עיצוב חדי קרן, הלקוחה ביקשה להוסיף פתק ברכה"
+111:   },
+112:   {
+113:     "order_id": 1003,
+114:     "order_date": "2026-06-17",
+115:     "product_type": "עוגת מוס פיסטוק",
+116:     "ingredients_cost": 150.00,
+117:     "final_price": 420.00,
+118:     "status": "Pending",
+119:     "customer_notes": "טבעוני, רגישות לאגוזי מלך (פיסטוק זה בסדר). משלוח עד השעה 16:00."
+120:   },
+121:   {
+122:     "order_id": 1004,
+123:     "order_date": "2026-06-18",
+124:     "product_type": "עוגת מספרים פריכה",
+125:     "ingredients_cost": 90.00,
+126:     "final_price": 280.00,
+127:     "status": "Cancelled",
+128:     "customer_notes": "בוטל עקב נסיעה לחו\"ל ברגע האחרון"
+129:   }
+130: ]
+131: למה המבנה הזה משרת אותנו בצורה אידיאלית?
+132: בדיקת הכלים (Tools): הסוכן יוכל להפעיל פונקציות כדי לחשב רווחיות פרויקטליית (final_price פחות ingredients_cost) או לבדוק מה שיעור העלות מתוך המחיר.
+133: חילוץ מידע מורכב: הסוכן יצטרך לסרוק את ה-customer_notes ולהבין בעצמו מתוך הטקסט אם יש מגבלות אלרגיה (למשל, לשים לב שבהזמנה 1003 צריך להיזהר מאגוזים) או בקשות תפעוליות.
+134: הכנה לשלב 5 (הדשבורד): יש לנו שדות תאריך וסטטוס שיאפשרו לנו לבנות בקלות מדדי KPI (כמו סך הכנסות, עלויות, כמות הזמנות בסטטוס פעיל).
+136: import json
+137: import pandas as pd
+139: # 1. הנתונים המדומים בפורמט JSON
+140: mock_data_json = """
+141: [
+142:   {
+143:     "order_id": 1001,
+144:     "order_date": "2026-06-15",
+145:     "product_type": "עוגת שוקולד קומותיים",
+146:     "ingredients_cost": 120.50,
+147:     "final_price": 350.00,
+148:     "status": "Delivered",
+149:     "customer_notes": "ללא גלוטן, נא לכתוב 'מזל טוב לדני'"
+150:   },
+151:   {
+152:     "order_id": 1002,
+153:     "order_date": "2026-06-16",
+154:     "product_type": "מארז קאפקייקס מעוצב",
+155:     "ingredients_cost": 45.00,
+156:     "final_price": 180.00,
+157:     "status": "In Progress",
+158:     "customer_notes": "עיצוב חדי קרן, הלקוחה ביקשה להוסיף פתק ברכה"
+159:   },
+160:   {
+161:     "order_id": 1003,
+162:     "order_date": "2026-06-17",
+163:     "product_type": "עוגת מוס פיסטוק",
+164:     "ingredients_cost": 150.00,
+165:     "final_price": 420.00,
+166:     "status": "Pending",
+167:     "customer_notes": "טבעוני, רגישות לאגוזי מלך (פיסטוק זה בסדר). משלוח עד השעה 16:00."
+168:   },
+169:   {
+170:     "order_id": 1004,
+171:     "order_date": "2026-06-18",
+172:     "product_type": "עוגת מספרים פריכה",
+173:     "ingredients_cost": 90.00,
+174:     "final_price": 280.00,
+175:     "status": "Cancelled",
+176:     "customer_notes": "בוטל עקב נסיעה לחו\"ל ברגע האחרון"
+177:   }
+178: ]
+179: """
+181: def load_and_prepare_data():
+182:     # 2. טעינת מחרוזת ה-JSON למבנה נתונים של פייתון
+183:     data = json.loads(mock_data_json)
+185:     # 3. יצירת DataFrame של Pandas
+186:     df = pd.DataFrame(data)
+188:     # 4. המרת עמודת התאריך לטיפוס נתונים מתאים
+189:     df['order_date'] = pd.to_datetime(df['order_date'])
+191:     # 5. הוספת מדדים מחושבים בסיסיים לטובת בדיקת הכלים של הסוכן
+192:     df['profit'] = df['final_price'] - df['ingredients_cost']
+193:     df['profit_margin_pct'] = (df['profit'] / df['final_price']) * 100
+195:     return df
+197: if __name__ == "__main__":
+198:     # הרצת פונקציית הטעינה
+199:     orders_df = load_and_prepare_data()
+201:     # הדפסת הנתונים בצורה מובנית
+202:     print("--- קובץ הנתונים המדומה נטען בהצלחה ---")
+203:     print(orders_df[['order_id', 'product_type', 'final_price', 'profit', 'status']])
+206: מה הקוד הזה עושה בשבילנו?
+207: הכנה לכלים של הסוכן (Tools): ה-DataFrame שנוצר (orders_df) יכול כעת לשמש כ"בסיס הנתונים" הזמני שעליו נלביש את הפונקציות משלב 1. למשל, פונקציה כמו get_order_details(order_id) פשוט תבצע סינון על ה-DataFrame הזה.
+208: בדיקת לוגיקה: העמודות המחושבות profit ו-profit_margin_pct יאפשרו לנו לבדוק אם הסוכן יודע לענות על שאלות כמו "מהי העוגה הכי רווחית שלנו?".
+211: שלב 4: 
+212: לולאת הסוכן היא ה"מנוע" שגורם להכל לקרות. זהו הקוד שמחבר בין החשיבה של מודל השפה (ה-System Prompt משלב 2) לבין הכלים הפיזיים שהגדרנו (הפונקציות משלב 1) והנתונים (ה-Mock Data משלב 3).
+213: הלולאה פועלת לפי תבנית שנקראת ReAct (Reasoning + Acting) - הסוכן חושב מה לעשות, מבצע פעולה (מפעיל כלי), מסתכל על התוצאה, וחוזר חלילה עד שיש לו מספיק מידע כדי לתת תשובה סופית ללקוח.
+214: הנה המבנה הקלאסי ללולאת סוכן בפייתון. הקוד מניח שיש לנו כבר את ה-orders_df משלב 3, ומראה איך הסוכן מנווט בו:
+217: import json
+219: # 1. הגדרת הכלי (Tool) מתוך שלב 1
+220: def get_order_details(order_id):
+221:     """כלי המחלץ את פרטי ההזמנה מתוך קובץ הנתונים (orders_df)"""
+222:     # חיפוש ההזמנה בדאטה-פריים שלנו
+223:     order = orders_df[orders_df['order_id'] == int(order_id)]
+225:     if order.empty:
+226:         return json.dumps({"error": f"Order {order_id} not found."})
+228:     # החזרת הנתונים כ-JSON כדי שמודל השפה יוכל לקרוא אותם בקלות
+229:     return order.to_json(orient="records", force_ascii=False)
+231: # מילון הכלים הזמינים לסוכן
+232: available_tools = {
+233:     "get_order_details": get_order_details
+234: }
+236: # 2. פונקציית לולאת הסוכן (The Agent Loop)
+237: def run_agent_loop(user_input, max_iterations=5):
+238:     # היסטוריית השיחה מתחילה עם ה-System Prompt (משלב 2) והבקשה של הלקוח
+239:     messages = [
+240:         {"role": "system", "content": "You are a helpful bakery AI assistant. Use the provided tools to look up order information."},
+241:         {"role": "user", "content": user_input}
+242:     ]
+244:     print(f"🧑‍🍳 בקשת הלקוח: {user_input}\n" + "-"*40)
+246:     # הלולאה: הסוכן יכול לבצע עד 5 פעולות שרשרת כדי לא להיתקע בלופ אינסופי
+247:     for iteration in range(max_iterations):
+249:         # שלב א': קריאה למודל השפה (כאן בפרויקט אמיתי שמים קריאה ל-API של OpenAI/Gemini)
+250:         # המודל בוחן את ההיסטוריה ומחליט - האם לענות טקסט, או להפעיל כלי?
+251:         response = call_llm_api(messages) # (פונקציית דמו)
+253:         # שלב ב': המודל החליט להפעיל כלי (Tool Call)
+254:         if response.wants_to_use_tool():
+255:             tool_name = response.tool_name
+256:             tool_args = response.tool_arguments # למשל: {"order_id": 1003}
+258:             print(f"⚙️ הסוכן מפעיל כלי: {tool_name} עם הפרמטרים {tool_args}")
+260:             # הרצת הפונקציה בפועל מול הנתונים שלנו
+261:             tool_result = available_tools[tool_name](**tool_args)
+262:             print(f"📊 תוצאת הכלי: {tool_result}")
+264:             # צירוף התוצאה להיסטוריית השיחה כדי שהמודל יקרא אותה בסבב הבא
+265:             messages.append({"role": "tool", "name": tool_name, "content": tool_result})
+267:         # שלב ג': המודל החליט שיש לו מספיק מידע כדי לענות (Final Answer)
+268:         else:
+269:             final_answer = response.text
+270:             print(f"🤖 תשובת הסוכן: {final_answer}")
+271:             return final_answer
+273:     print("❌ שגיאה: הסוכן הגיע למקסימום איטרציות ולא הצליח לספק תשובה.")
+275: # הרצה לדוגמה (מה היה קורה בפועל):
+276: # בקשת הלקוח: "מה קורה עם הזמנה 1003? יש לי בקשה מיוחדת שם"
+277: # ⚙️ הסוכן מפעיל כלי: get_order_details עם הפרמטרים {'order_id': 1003}
+278: # 📊 תוצאת הכלי: [{"order_id":1003,"status":"Pending","customer_notes":"טבעוני, רגישות לאגוזי מלך..."}]
+279: # 🤖 תשובת הסוכן: "הזמנה 1003 כרגע בסטטוס ממתין (Pending). ראיתי שביקשת עוגת מוס פיסטוק טבעונית וציינת רגישות לאגוזי מלך..."
+283: שלב 4 – שלב ביניים נוסף: - כדי לא להיות תלויים בדוגמא שניתנה אלא לבנות דשבורד עבור כל סוג דאטה שהתקבל. 
+284: פרומפט ה"אנליסט" (The Semantic Prompt)
+285: נכניס שלב ביניים לפני בניית הדשבורד. הסוכן יקבל את המטא-דאטה שחילצנו יחד עם System Prompt שמוגדר כך:
+286: "אתה מנתח נתונים עסקי מומחה. קיבלת סכימה של דאטה סט חדש. המטרה שלך היא לזהות את 4 ה-KPIs החשובים ביותר שבעל עסק ירצה לראות, ו-2 גרפים לחיתוך נתונים. החזר את התשובה שלך בפורמט JSON קשיח המגדיר את החישובים."
+287: הסוכן יזהה שעמודת Revenue מסוג Float היא מדד שצריך לסכום ($SUM$), שעמודת Status מסוג טקסט היא קטגוריה שצריך לספור ($COUNT$), ושעמודת Timestamp תשמש לציר הזמן.
+288: import json
+289: import re
+291: def generate_dashboard_config(metadata: dict) -> dict:
+292:     """
+293:     מקבלת מטא-דאטה של נתונים, שולחת פרומפט למודל שפה, 
+294:     ומחזירה קונפיגורציית דשבורד (KPIs וגרפים) בפורמט JSON נקי.
+295:     """
+297:     # 1. ה-System Prompt שמגדיר את התפקיד, החוקים והפורמט
+298:     system_prompt = """
+299:     אתה מנתח נתונים עסקי מומחה (BI System Analyst). 
+300:     קיבלת סכימה של דאטה סט חדש (Metadata). 
+302:     המטרה שלך היא לזהות את 4 ה-KPIs החשובים ביותר שבעל עסק ירצה לראות, ו-2 גרפים לחיתוך נתונים.
+304:     חוקי הניתוח שלך:
+305:     1. זיהוי מדדים (Measures): חפש עמודות מספריות (Float/Int) כמו 'Revenue', 'Price' או 'Cost' והגדר להן פונקציות אגרגציה כגון SUM או AVG.
+306:     2. זיהוי ממדים (Dimensions): חפש עמודות קטגוריאליות (String/Text) כמו 'Status' או 'Type' והגדר להן ספירה (COUNT) או חיתוך (Group By).
+307:     3. זיהוי ציר זמן: חפש עמודות תאריך/שעה (Datetime/Timestamp) כדי שישמשו כציר ה-X בגרפים מגמתיים.
+309:     עליך להחזיר את התשובה *אך ורק* בפורמט JSON קשיח ותקין, ללא שום טקסט מקדים או מסכם.
+311:     מבנה ה-JSON הנדרש:
+312:     {
+313:       "kpis": [
+314:         {
+315:           "name": "שם המדד (למשל: סך הכנסות)",
+316:           "calculation": "SUM(column_name)",
+317:           "business_logic": "הסבר קצר על הערך העסקי"
+318:         }
+319:       ],
+320:       "charts": [
+321:         {
+322:           "title": "כותרת הגרף",
+323:           "type": "bar_chart | line_chart | pie_chart",
+324:           "x_axis": "column_name",
+325:           "y_axis": "calculation (e.g., COUNT(id) or SUM(revenue))"
+326:         }
+327:       ]
+328:     }
+329:     """
+331:     # 2. ה-User Prompt שמזריק את המטא-דאטה בצורה קריאה למודל
+332:     user_prompt = f"הנה סכימת הנתונים (Metadata) לניתוח:\n{json.dumps(metadata, indent=2, ensure_ascii=False)}"
+334:     # 3. קריאה למודל השפה (כאן נכנסת הקריאה ל-API של ה-LLM שלך)
+335:     # response_text = call_llm_api(system_prompt, user_prompt)
+337:     # --- סימולציה של תשובת המודל (לצורך ההדגמה) ---
+338:     response_text = """
+339:     {
+340:       "kpis": [
+341:         {"name": "Total Revenue", "calculation": "SUM(final_price)", "business_logic": "מחזור המכירות הכולל"},
+342:         {"name": "Total Orders", "calculation": "COUNT(order_id)", "business_logic": "כמות ההזמנות שנכנסו"},
+343:         {"name": "Average Cost", "calculation": "AVG(ingredients_cost)", "business_logic": "עלות ממוצעת לחומר הגלם"},
+344:         {"name": "Pending Orders", "calculation": "COUNTIF(status='Pending')", "business_logic": "הזמנות שממתינות לטיפול"}
+345:       ],
+346:       "charts": [
+347:         {"title": "Revenue Over Time", "type": "line_chart", "x_axis": "order_date", "y_axis": "SUM(final_price)"},
+348:         {"title": "Orders by Status", "type": "pie_chart", "x_axis": "status", "y_axis": "COUNT(order_id)"}
+349:       ]
+350:     }
+351:     """
+352:     # -----------------------------------------------
+354:     # 4. ניקוי ופרסור התשובה ל-Dictionary של פייתון
+355:     try:
+356:         # חילוץ ה-JSON למקרה שהמודל הוסיף Markdown כמו ```json...```
+357:         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+358:         if json_match:
+359:             clean_json_str = json_match.group(0)
+360:             config_dict = json.loads(clean_json_str)
+361:             return config_dict
+362:         else:
+363:             raise ValueError("לא נמצא מבנה JSON תקין בתשובת המודל.")
+365:     except json.JSONDecodeError as e:
+366:         print(f"שגיאה בפענוח ה-JSON שחזר מהמודל: {e}")
+367:         return None
+369: # --- בדיקת הקוד מול מטא-דאטה לדוגמה ---
+370: if __name__ == "__main__":
+371:     # נתונים שמדמים את מה שחילצנו מהדאטה סט החדש
+372:     sample_metadata = {
+373:         "columns": [
+374:             {"name": "order_id", "type": "Int64", "sample_values": [1001, 1002]},
+375:             {"name": "order_date", "type": "Datetime", "sample_values": ["2026-06-15", "2026-06-16"]},
+376:             {"name": "final_price", "type": "Float64", "sample_values": [350.0, 180.0]},
+377:             {"name": "ingredients_cost", "type": "Float64", "sample_values": [120.5, 45.0]},
+378:             {"name": "status", "type": "String", "sample_values": ["Delivered", "Pending"]}
+379:         ],
+380:         "total_rows": 1500
+381:     }
+383:     # הרצת הפונקציה
+384:     dashboard_schema = generate_dashboard_config(sample_metadata)
+386:     print("--- קונפיגורציית ה-BI שהמודל ייצר (JSON מופרסר) ---")
+387:     print(json.dumps(dashboard_schema, indent=2, ensure_ascii=False))
+390: למה המבנה הזה קריטי לארכיטקטורה אגנוסטית?
+391: אילוץ פלט (JSON Validation): מודלי שפה נוטים להיות "פטפטנים". הוספת הביטוי הרגולרי (re.search) מבטיחה שגם אם המודל עוטף את התשובה בטקסט מיותר, המערכת תחלץ רק את הבלוק של האובייקט הקשיח.
+392: הפרדת תפקידים: ה-System Prompt מגדיר במדויק את המושגים הטכניים (אגרגציה, Group By). זה חוסך את הצורך לבצע מיפוי ידני בכל פעם שמקור נתונים חדש נכנס לתהליך (ELT/ETL).
+393: שדה ה-business_logic: ביקשנו מהמודל לספק הסבר קצר לכל KPI. זה שימושי מאוד כי אפשר להציג את ההסבר הזה כ-Tooltip בדשבורד ה-Streamlit שייבנה בהמשך, מה שנותן למשתמש הקצה שקיפות לגבי מה שהוא רואה.
+395: שלב 5 – דשבורד
+396: לאחר שבנינו את התשתית הטכנית, את לולאת הסוכן ואת שכבת הנתונים המדומים, השלב האחרון והמרתק ביותר הוא בניית הדשבורד הדינמי. כפי שביקשת, הפוקוס כאן הוא על היכולת של הסוכן "להבין לבד" אילו מדדים (KPIs) להציג בהתאמה לסוג הנתונים שהוא מקבל, ללא צורך בתכנות מראש לכל דומיין.
+397: זהו רגע השיא של הפרויקט. אנחנו מחברים את "הידיים" (הכלים משלב 1), את "המוח" (הפרומפט משלב 2), את "הדלק" (הנתונים משלב 3) ואת "המנוע" (הלולאה משלב 4) לכדי מוצר BI שלם ואוטונומי.
+399: import streamlit as st
+400: import pandas as pd
+401: import json
+402: from datetime import datetime
+404: # --- שלב 3: טעינת הנתונים (הדלק) ---
+405: mock_data = [
+406:     {"order_id": 1001, "order_date": "2026-06-15", "product_type": "עוגת שוקולד", "cost": 120, "price": 350, "status": "Delivered"},
+407:     {"order_id": 1002, "order_date": "2026-06-16", "product_type": "קאפקייקס", "cost": 45, "price": 180, "status": "In Progress"},
+408:     {"order_id": 1003, "order_date": "2026-06-17", "product_type": "מוס פיסטוק", "cost": 150, "price": 420, "status": "Pending"},
+409: ]
+410: df = pd.DataFrame(mock_data)
+411: df['profit'] = df['price'] - df['cost']
+413: # --- שלב 1: הכלים (הידיים) ---
+414: def get_order_info(oid):
+415:     return df[df['order_id'] == oid].to_json(orient="records")
+417: # --- שלב 2 + 4: לוגיקת הסוכן (המוח והמנוע) ---
+418: def agent_reasoning(user_query):
+419:     # כאן מתבצעת הקריאה ל-LLM עם ה-System Prompt משלב 2
+420:     # לצורך הדוגמה, הסוכן "מבין" שעליו לשלוף נתונים
+421:     return f"הסוכן ניתח את הבקשה: '{user_query}' והחליט להציג מדדי רווחיות."
+423: # --- שלב 5: בניית ה-UI (הדשבורד) ---
+424: st.set_page_config(page_title="AI Autonomous BI", layout="wide")
+425: st.title("🍰 מערכת BI אוטונומית - ניהול קונדיטוריה")
+427: # תצוגת מדדים דינמית
+428: kpi1, kpi2, kpi3 = st.columns(3)
+429: kpi1.metric("סה\"כ הכנסות", f"₪{df['price'].sum()}")
+430: kpi2.metric("רווח נקי", f"₪{df['profit'].sum()}")
+431: kpi3.metric("הזמנות פעילות", len(df[df['status'] != 'Delivered']))
+433: st.write("### צ'אט עם האנליסט (Agent Loop)")
+434: query = st.text_input("שאל את הסוכן על הנתונים (למשל: 'מי המוצר הכי רווחי?')")
+435: if query:
+436:     st.info(agent_reasoning(query))
+460: הקוד המאוחד: 
+461: import pandas as pd
+462: import json
+463: import re
+464: from datetime import datetime
+466: # ==========================================
+467: # 1. נתוני המקור (Mock Data)
+468: # ==========================================
+469: mock_data = [
+470:     {"order_id": 1001, "order_date": "2026-06-15", "product_type": "עוגת שוקולד", "ingredients_cost": 120.50, "final_price": 350.00, "status": "Delivered"},
+471:     {"order_id": 1002, "order_date": "2026-06-16", "product_type": "מארז קאפקייקס", "ingredients_cost": 45.00, "final_price": 180.00, "status": "In Progress"},
+472:     {"order_id": 1003, "order_date": "2026-06-17", "product_type": "מוס פיסטוק", "ingredients_cost": 150.00, "final_price": 420.00, "status": "Pending"}
+473: ]
+475: # ==========================================
+476: # 2. מנוע הפרופיילינג (שלב הביניים)
+477: # ==========================================
+478: def profile_dataset(df: pd.DataFrame) -> dict:
+479:     """סורקת את הנתונים ומייצרת מטא-דאטה מובנה עבור הסוכן"""
+480:     metadata = {
+481:         "total_rows": len(df),
+482:         "total_columns": len(df.columns),
+483:         "columns": []
+484:     }
+486:     for col_name in df.columns:
+487:         data_type = str(df[col_name].dtype)
+488:         # דגימת ערכים והמרה לטקסט כדי למנוע שגיאות JSON
+489:         sample_values = [
+490:             str(val) if isinstance(val, (pd.Timestamp, datetime)) else val 
+491:             for val in df[col_name].dropna().head(2).tolist()
+492:         ]
+494:         col_info = {
+495:             "name": col_name,
+496:             "type": data_type,
+497:             "unique_values_count": df[col_name].nunique(),
+498:             "missing_percentage": round((df[col_name].isnull().sum() / len(df)) * 100, 2),
+499:             "sample_values": sample_values
+500:         }
+501:         metadata["columns"].append(col_info)
+503:     return metadata
+505: # ==========================================
+506: # 3. האנליסט הסמנטי (פרומפט + מודל AI)
+507: # ==========================================
+508: def generate_dashboard_config(metadata: dict) -> dict:
+509:     """מקבלת מטא-דאטה, שולחת למודל ומחזירה קונפיגורציית דשבורד ב-JSON"""
+511:     # הפרומפט שולב מאחורי הקלעים
+512:     system_prompt = "אתה מנתח נתונים עסקי מומחה. זהה 4 KPIs ו-2 גרפים מתוך המטא-דאטה..."
+513:     user_prompt = f"Metadata:\n{json.dumps(metadata, ensure_ascii=False)}"
+515:     # --- סימולציה של תשובת מודל ה-LLM המבוססת על המטא-דאטה שקיבל ---
+516:     # (בפרויקט אמיתי כאן תהיה קריאה ל-API של מודל השפה)
+517:     mock_llm_response = """
+518:     {
+519:       "kpis": [
+520:         {"name": "סה\"כ הכנסות", "calculation": "SUM(final_price)", "business_logic": "מחזור מכירות כולל"},
+521:         {"name": "עלות חומרי גלם", "calculation": "SUM(ingredients_cost)", "business_logic": "הוצאות ישירות"},
+522:         {"name": "כמות הזמנות", "calculation": "COUNT(order_id)", "business_logic": "נפח פעילות"},
+523:         {"name": "סטטוסים ייחודיים", "calculation": "COUNT_DISTINCT(status)", "business_logic": "מעקב תפעולי"}
+524:       ],
+525:       "charts": [
+526:         {"title": "הכנסות לפי תאריך", "type": "line_chart", "x_axis": "order_date", "y_axis": "SUM(final_price)"},
+527:         {"title": "התפלגות סטטוס הזמנות", "type": "pie_chart", "x_axis": "status", "y_axis": "COUNT(order_id)"}
+528:       ]
+529:     }
+530:     """
+532:     # פרסור התשובה לאובייקט פייתון
+533:     json_match = re.search(r'\{.*\}', mock_llm_response, re.DOTALL)
+534:     if json_match:
+535:         return json.loads(json_match.group(0))
+536:     return {}
+538: # ==========================================
+539: # 4. הרצת ה-Pipeline המלא
+540: # ==========================================
+541: if __name__ == "__main__":
+542:     print("⏳ מתחיל תהליך Agentic BI Pipeline...\n")
+544:     # א. טעינת נתונים
+545:     print("✅ [1/3] טוען נתונים גולמיים וממיר ל-DataFrame...")
+546:     df = pd.DataFrame(mock_data)
+547:     df['order_date'] = pd.to_datetime(df['order_date'])
+549:     # ב. פרופיילינג
+550:     print("✅ [2/3] מריץ Data Profiling לחילוץ Metadata...")
+551:     dataset_metadata = profile_dataset(df)
+553:     # ג. ניתוח סמנטי
+554:     print("✅ [3/3] שולח Metadata ל-LLM לבניית ארכיטקטורת דשבורד...\n")
+555:     dashboard_config = generate_dashboard_config(dataset_metadata)
+557:     # ד. פלט סופי
+558:     print("🎯 הפלט הסופי (JSON מוכן לרינדור בדשבורד):")
+559:     print("-" * 50)
+560:     print(json.dumps(dashboard_config, indent=2, ensure_ascii=False))
+561:     print("-" * 50)
+569: \

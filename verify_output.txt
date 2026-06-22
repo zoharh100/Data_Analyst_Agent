@@ -1,0 +1,64 @@
+﻿Testing data_loader...
+  OK: 15 rows, 9 columns
+  Columns: ['order_id', 'order_date', 'product_type', 'ingredients_cost', 'final_price', 'status', 'customer_notes', 'profit', 'profit_margin_pct']
+
+Testing agent_tools...
+  read_dataset_schema OK
+  run_python_analysis OK (output length: 336)
+
+Testing dashboard_config...
+  OK: 4 KPIs, 2 charts
+    KPI: Total Revenue = SUM(final_price)
+    KPI: Total Ingredient Cost = SUM(ingredients_cost)
+    KPI: Total Orders = COUNT(order_id)
+    KPI: Active Statuses = COUNT_DISTINCT(status)
+
+Testing agent_loop...
+
+[AGENT] Started | query: What is the status of order 1003?
+------------------------------------------------------------
+
+[Iteration 1/3]
+[TOOL] Calling: read_dataset_schema
+   Args: C:\Git Repos\Data_Analyst_Agent\data\orders.csv...
+[OBS] Observation: Columns and Data types:
+order_id              int64
+order_date           object
+product_type         object
+ingredients_cost    float64
+final_price         float64
+status               object
+customer...
+
+[Iteration 2/3]
+[TOOL] Calling: run_python_analysis
+   Args: 
+import pandas as pd
+df = pd.read_csv(r'C:\Git Repos\Data_Analyst_Agent\data\orders.csv')
+df['profit'] = df['final_price...
+[OBS] Observation: {'total_revenue': np.float64(4480.0), 'total_cost': np.float64(1465.5), 'total_profit': np.float64(3014.5), 'avg_margin_pct': np.float64(68.53161554987119), 'total_orders': 15, 'status_counts': {'Deli...
+
+[Iteration 3/3]
+
+[DONE] Final Answer:
+Final Answer:
+1. Data Structure Overview
+   The dataset contains bakery orders with columns: order_id, order_date,
+   product_type, ingredients_cost, final_price, status, customer_notes.
+
+2. Key Findings
+   Analysis results: {'total_revenue': np.float64(4480.0), 'total_cost': np.float64(1465.5), 'total_profit': np.float64(3014.5), 'avg_margin_pct': np.float64(68.53161554987119), 'total_orders': 15, 'status_counts': {'Delivered': 7, 'In Progress': 3, 'Pending': 3, 'Cancelled': 2}, 'product_revenue': {'Gluten Free Cake': 1290.0, 'Wedding Cake - Multifloor': 1140.0, 'Birthday Cake - Vanilla': 385.0, 'Birthday Cake - Chocolate': 365.0, 'Wedding Cake - Single Tier': 290.0, "Groom's Cake - Carrot": 280.0, "Groom's Cake - Red Velvet": 270.0, "Groom's Cake - Chocolate": 260.0, 'Birthday Cake - Strawberry': 200.0}}
+
+3. Actionable Recommendations
+   - Focus on high-margin products (Wedding & Gluten-Free cakes).
+   - Investigate Cancelled orders to reduce revenue leakage.
+   - Monitor Pending orders to ensure on-time delivery.
+   - Improve cost efficiency on lower-margin Birthday cakes.
+
+  Agent loop OK (answer length: 1093)
+
+=== All modules verified successfully! ===
+
+Total revenue: 4,480.00
+Total profit:  3,014.50
+Avg margin:    68.5%
