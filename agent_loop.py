@@ -62,50 +62,64 @@ AVAILABLE_TOOLS: dict = {
 }
 
 # ---------------------------------------------------------------------------
-# LLM adapter — real Gemini call or rule-based fallback
+# LLM adapter — Universal LLM support (via LiteLLM) or rule-based fallback
 # ---------------------------------------------------------------------------
 
-def call_llm_api(messages: list[dict]) -> dict:
+def call_llm_api(messages: list[dict], model_name: str = None) -> dict:
     """
-    Call the LLM and return a structured response dict:
-        {
-            "wants_tool": bool,
-            "tool_name":  str | None,
-            "tool_args":  dict | str | None,
-            "text":       str
-        }
-
-    If GOOGLE_API_KEY is set, uses the Gemini 1.5 Flash model.
-    Otherwise, falls back to a simple rule-based simulator.
+    Call the LLM and return a structured response dict.
+    Takes the API key from the Streamlit UI (environment variables) 
+    and dynamically routes it via LiteLLM.
     """
-    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    # סטרימליט שומר את המפתח שהזנת בממשק לתוך GOOGLE_API_KEY
+    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    
+    # אם הזנת מפתח אבל לא הוגדר ממודל ספציפי - נבחר בג'מיני כברירת מחדל (כדי להתאים לממשק שלך)
+    if os.environ.get("GOOGLE_API_KEY") and not model_name:
+        model_name = "gemini/gemini-1.5-flash"
+        
+    model = model_name or os.environ.get("LLM_MODEL", "")
 
-    if api_key:
-        return _call_gemini(messages, api_key)
+    # אם יש גם מודל וגם מפתח, נפעיל את המודל האמיתי. אחרת - נחזור לסימולטור.
+    if model and api_key:
+        return _call_universal_llm(messages, model, api_key)
     else:
         return _simulate_response(messages)
 
 
-def _call_gemini(messages: list[dict], api_key: str) -> dict:
-    """Call the Google Gemini API."""
+def _call_universal_llm(messages: list[dict], model_name: str, api_key: str) -> dict:
+    """Call ANY LLM API using the litellm library with an explicit API key."""
     try:
-        import google.generativeai as genai  # type: ignore
+        import litellm
 
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-
-        # Build a simple text prompt from message history
-        prompt_parts = []
+        formatted_messages = []
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
-            prompt_parts.append(f"[{role.upper()}] {content}")
+            
+            if role == "tool":
+                content = f"Observation from {msg.get('name', 'tool')}:\n{content}"
+                role = "user"
+                
+            formatted_messages.append({"role": role, "content": content})
 
-        full_prompt = "\n\n".join(prompt_parts)
-        response = model.generate_content(full_prompt)
-        response_text = response.text
+        # קריאה אוניברסלית באמצעות המפתח שהגיע מהסטרימליט
+        response = litellm.completion(
+            model=model_name,
+            messages=formatted_messages,
+            api_key=api_key 
+        )
+        
+        response_text = response.choices[0].message.content
         return _parse_react_response(response_text)
 
+    except ImportError:
+        return {
+            "wants_tool": False,
+            "tool_name": None,
+            "tool_args": None,
+            "text": "LLM API Error: The 'litellm' package is missing. Please install it using `pip install litellm`.",
+        }
     except Exception as e:
         return {
             "wants_tool": False,
@@ -267,16 +281,6 @@ def run_agent_loop(
 ) -> str:
     """
     Execute the ReAct agent loop.
-
-    Parameters
-    ----------
-    user_input    : The user's question or analysis request.
-    system_prompt : Persona + tools + process instructions for the LLM.
-    max_iterations: Hard cap on Thought/Action cycles (prevents infinite loops).
-
-    Returns
-    -------
-    str : The agent's final answer.
     """
     messages = [
         {"role": "system", "content": system_prompt},
@@ -347,7 +351,7 @@ if __name__ == "__main__":
     print("=" * 60)
     answer2 = run_agent_loop(
         user_input=f"Analyse the bakery orders dataset at '{DATA_PATH}'. "
-                   "What are the top insights for the manager?",
+                    "What are the top insights for the manager?",
         system_prompt=SYSTEM_PROMPT,
         max_iterations=10,
-    )
+    ) 
