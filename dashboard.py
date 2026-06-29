@@ -771,6 +771,7 @@ with st.sidebar:
                     demo_df[_col] = demo_df[_col].astype(str)
             st.session_state["df"] = demo_df
             st.session_state["filename"] = "orders.csv"
+            st.session_state["is_demo"] = True
             st.session_state["analysis_done"] = False
             st.session_state["agent_analysis"] = None
             st.session_state["dash_config"] = None
@@ -824,7 +825,7 @@ with st.sidebar:
     )
     if api_key_input:
         import os
-        os.environ["GOOGLE_API_KEY"] = api_key_input
+        os.environ["GOOGLE_API_KEY"] = api_key_input.strip().strip('"').strip("'")
         
     max_iter = st.slider("Max iterations", 3, 10, 8)
 
@@ -876,6 +877,7 @@ if uploaded is not None:
 
         st.session_state["df"] = df_loaded
         st.session_state["filename"] = uploaded.name
+        st.session_state["is_demo"] = False
         st.session_state["analysis_done"] = False
         st.session_state["agent_analysis"] = None
         st.session_state["dash_config"] = None
@@ -930,6 +932,7 @@ if st.session_state["df"] is None:
                 df_demo["order_date"] = pd.to_datetime(df_demo["order_date"], errors="coerce")
                 st.session_state["df"] = df_demo
                 st.session_state["filename"] = "orders.csv"
+                st.session_state["is_demo"] = True
                 st.session_state["analysis_done"] = False
                 st.session_state["agent_analysis"] = None
                 st.session_state["dash_config"] = None
@@ -947,6 +950,7 @@ if st.session_state["df"] is None:
                         pass
             st.session_state["df"] = df_loaded
             st.session_state["filename"] = drop.name
+            st.session_state["is_demo"] = False
             st.session_state["analysis_done"] = False
             st.session_state["agent_analysis"] = None
             st.session_state["dash_config"] = None
@@ -1027,7 +1031,7 @@ if not st.session_state["analysis_done"]:
         api_key = os.environ.get('GOOGLE_API_KEY', '')
         
         # Force the demo dataset to skip the LLM and use the local simulator
-        if st.session_state.get('filename') == "orders.csv":
+        if st.session_state.get('is_demo', False):
             api_key = ""
             for k in ["GOOGLE_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"]:
                 if k in os.environ:
@@ -1035,6 +1039,11 @@ if not st.session_state["analysis_done"]:
                 
         file_hash = hash(f"{st.session_state['filename']}_{len(df_raw)}_{list(df_raw.columns)}_{api_key}_v4")
         analysis = run_full_analysis(tmp_path, file_hash)
+        
+        # Prevent caching of API failures (so the user can retry immediately)
+        if "API Error" in analysis.get("__trace__", "") or "API key" in analysis.get("__trace__", ""):
+            run_full_analysis.clear()
+            
         # Step 4: Store results
         prog_bar.progress(90, text="Step 4/4 — Building dashboard…")
         st.session_state["agent_analysis"] = analysis

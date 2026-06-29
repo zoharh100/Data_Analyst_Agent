@@ -81,10 +81,12 @@ def call_llm_api(messages: list[dict], model_name: str = "") -> dict:
         or os.environ.get("OPENAI_API_KEY")
     )
 
-    if not api_key:
+    if not api_key or not api_key.strip():
         _last_llm_error = "No API key configured. Enter your Gemini API key in the sidebar."
         _used_simulator = True
         return _simulate_response(messages)
+
+    api_key = api_key.strip().strip('"').strip("'")
 
     models_to_try = [model_name] if model_name else _GEMINI_MODEL_CHAIN
 
@@ -119,37 +121,29 @@ def _categorize_llm_error(error_str: str) -> str:
 
 def _call_universal_llm(messages: list[dict], model_name: str, api_key: str):
     try:
-        import google.generativeai as genai
-        from google.generativeai.types import HarmCategory, HarmBlockThreshold
-        genai.configure(api_key=api_key)
-        system_instruction = ""
-        contents = []
-        for msg in messages:
-            if msg["role"] == "system":
-                system_instruction = msg["content"]
-            elif msg["role"] == "user":
-                contents.append({"role": "user", "parts": [msg["content"]]})
-            elif msg["role"] == "assistant":
-                contents.append({"role": "model", "parts": [msg["content"]]})
-            elif msg["role"] == "tool":
-                contents.append({"role": "user", "parts": [f"Observation from {msg.get('name', 'tool')}:\n{msg['content']}"]})
+        import litellm
         
-        model = genai.GenerativeModel(
-            model_name=model_name,
-            system_instruction=system_instruction,
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            }
-        )
+        provider_model = f"gemini/{model_name}" if not model_name.startswith("gemini/") else model_name
+        
+        # Gemini specific safety settings via litellm
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
         
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = model.generate_content(contents)
-                return _parse_react_response(response.text), ""
+                response = litellm.completion(
+                    model=provider_model,
+                    messages=messages,
+                    api_key=api_key,
+                    safety_settings=safety_settings,
+                    drop_params=True
+                )
+                return _parse_react_response(response.choices[0].message.content), ""
             except Exception as e:
                 err_str = str(e).lower()
                 if "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource_exhausted" in err_str:
