@@ -17,7 +17,7 @@ Here we provide:
      via the google-generativeai SDK if GOOGLE_API_KEY is set.
   b) A rule-based fallback simulator for offline/demo use.
 
-The bakery-specific get_order_details tool is also defined here so the loop
+The order-specific get_order_details tool is also defined here so the loop
 can look up individual orders by ID.
 """
 
@@ -28,12 +28,12 @@ from typing import Any
 
 import pandas as pd
 
-from agent_prompts import BAKERY_SYSTEM_PROMPT, SYSTEM_PROMPT
+from agent_prompts import SYSTEM_PROMPT
 from agent_tools import read_dataset_schema, run_python_analysis
 from data_loader import orders_df
 
 # ---------------------------------------------------------------------------
-# Bakery-specific tool: get_order_details
+# Order-specific tool: get_order_details
 # ---------------------------------------------------------------------------
 
 def get_order_details(order_id: Any) -> str:
@@ -62,71 +62,105 @@ AVAILABLE_TOOLS: dict = {
 }
 
 # ---------------------------------------------------------------------------
-# LLM adapter — Universal LLM support (via LiteLLM) or rule-based fallback
+# LLM adapter — Google Generative AI (Gemini)
 # ---------------------------------------------------------------------------
+import time
 
-def call_llm_api(messages: list[dict], model_name: str = None) -> dict:
-    """
-    Call the LLM and return a structured response dict.
-    Takes the API key from the Streamlit UI (environment variables) 
-    and dynamically routes it via LiteLLM.
-    """
-    # סטרימליט שומר את המפתח שהזנת בממשק לתוך GOOGLE_API_KEY
-    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or os.environ.get("OPENAI_API_KEY")
-    
-    # אם הזנת מפתח אבל לא הוגדר ממודל ספציפי - נבחר בג'מיני כברירת מחדל (כדי להתאים לממשק שלך)
-    if os.environ.get("GOOGLE_API_KEY") and not model_name:
-        model_name = "gemini/gemini-1.5-flash"
-        
-    model = model_name or os.environ.get("LLM_MODEL", "")
+_GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.0-flash"]
+_last_llm_error = ""
+_used_simulator = False
 
-    # אם יש גם מודל וגם מפתח, נפעיל את המודל האמיתי. אחרת - נחזור לסימולטור.
-    if model and api_key:
-        return _call_universal_llm(messages, model, api_key)
-    else:
+def get_last_llm_status() -> dict:
+    return {"used_simulator": _used_simulator, "error": _last_llm_error}
+
+def call_llm_api(messages: list[dict], model_name: str = "") -> dict:
+    global _last_llm_error, _used_simulator
+    api_key = (
+        os.environ.get("GOOGLE_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+    )
+
+    if not api_key:
+        _last_llm_error = "No API key configured. Enter your Gemini API key in the sidebar."
+        _used_simulator = True
         return _simulate_response(messages)
 
+    models_to_try = [model_name] if model_name else _GEMINI_MODEL_CHAIN
 
-def _call_universal_llm(messages: list[dict], model_name: str, api_key: str) -> dict:
-    """Call ANY LLM API using the litellm library with an explicit API key."""
+    last_error = ""
+    for model in models_to_try:
+        result, last_error = _call_universal_llm(messages, model, api_key)
+        if result is not None:
+            return result
+        if _is_key_error(last_error):
+            break
+
+    _last_llm_error = last_error
+    _used_simulator = True
+    print(f"[WARN] All LLM models failed. Last error: {last_error} -- using simulator.")
+    return _simulate_response(messages)
+
+def _is_key_error(error_str: str) -> bool:
+    s = error_str.lower()
+    return any(k in s for k in ("401", "403", "invalid api key", "api_key_invalid", "permission denied", "unauthorized", "authentication"))
+
+def _categorize_llm_error(error_str: str) -> str:
+    s = error_str.lower()
+    if _is_key_error(error_str):
+        return "❌ Invalid API Key — your Gemini API key was rejected (HTTP 401/403)."
+    if "404" in s or "model not found" in s or "not found" in s:
+        return "❌ Model Not Found (HTTP 404) — the selected Gemini model doesn't exist or your key doesn't have access to it."
+    if "429" in s or "rate limit" in s or "resource_exhausted" in s or "quota" in s:
+        if "per minute" in s or "rate_limit" in s or "requests per minute" in s:
+            return "⏱️ Rate Limited (per-minute) — you've hit the 5 req/min free-tier limit. The agent will automatically retry. Wait ~60 seconds and click 🔄 Re-analyse."
+        return "📵 Quota Exhausted — your daily free-tier quota is used up. Wait until midnight (PT) for it to reset, or upgrade your plan."
+    return f"⚠️ API Error: {error_str}"
+
+def _call_universal_llm(messages: list[dict], model_name: str, api_key: str):
     try:
-        import litellm
-
-        formatted_messages = []
+        import google.generativeai as genai
+        from google.generativeai.types import HarmCategory, HarmBlockThreshold
+        genai.configure(api_key=api_key)
+        system_instruction = ""
+        contents = []
         for msg in messages:
-            role = msg.get("role", "user")
-            content = msg.get("content", "")
-            
-            if role == "tool":
-                content = f"Observation from {msg.get('name', 'tool')}:\n{content}"
-                role = "user"
-                
-            formatted_messages.append({"role": role, "content": content})
-
-        # קריאה אוניברסלית באמצעות המפתח שהגיע מהסטרימליט
-        response = litellm.completion(
-            model=model_name,
-            messages=formatted_messages,
-            api_key=api_key 
+            if msg["role"] == "system":
+                system_instruction = msg["content"]
+            elif msg["role"] == "user":
+                contents.append({"role": "user", "parts": [msg["content"]]})
+            elif msg["role"] == "assistant":
+                contents.append({"role": "model", "parts": [msg["content"]]})
+            elif msg["role"] == "tool":
+                contents.append({"role": "user", "parts": [f"Observation from {msg.get('name', 'tool')}:\n{msg['content']}"]})
+        
+        model = genai.GenerativeModel(
+            model_name=model_name,
+            system_instruction=system_instruction,
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            }
         )
         
-        response_text = response.choices[0].message.content
-        return _parse_react_response(response_text)
-
-    except ImportError:
-        return {
-            "wants_tool": False,
-            "tool_name": None,
-            "tool_args": None,
-            "text": "LLM API Error: The 'litellm' package is missing. Please install it using `pip install litellm`.",
-        }
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = model.generate_content(contents)
+                return _parse_react_response(response.text), ""
+            except Exception as e:
+                err_str = str(e).lower()
+                if "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource_exhausted" in err_str:
+                    if "per minute" in err_str or "rate_limit" in err_str:
+                        if attempt < max_retries - 1:
+                            print(f"[WARN] Rate limited. Retrying in 15 seconds... (Attempt {attempt+1}/{max_retries})")
+                            time.sleep(15)
+                            continue
+                raise e
     except Exception as e:
-        return {
-            "wants_tool": False,
-            "tool_name": None,
-            "tool_args": None,
-            "text": f"LLM API Error: {e}",
-        }
+        return None, str(e)
 
 
 def _parse_react_response(text: str) -> dict:
@@ -177,98 +211,310 @@ def _parse_react_response(text: str) -> dict:
 def _simulate_response(messages: list[dict]) -> dict:
     import re
     import json
-    
+    import pandas as pd
+
     observations = [m for m in messages if m.get("role") == "tool"]
     step = len(observations)
-    
-    # Extract file path from first message
-    file_path = DATA_PATH
+
+    # Extract file path from user message
+    file_path = ""
     for msg in messages:
         m = re.search(r"Analyse the dataset at '(.*?)'", msg.get("content", ""))
         if m:
             file_path = m.group(1)
             break
 
+    if not file_path:
+        return {
+            "wants_tool": False, "tool_name": None, "tool_args": None,
+            "text": "Error: No dataset path found. Please upload a dataset first."
+        }
+
     if step == 0:
         return {
             "wants_tool": True,
             "tool_name": "read_dataset_schema",
             "tool_args": file_path,
-            "text": "Thought: I need to understand the dataset structure first.\nAction: read_dataset_schema\nAction Input: " + file_path
+            "text": f"Thought: Read the schema first.\nAction: read_dataset_schema\nAction Input: {file_path}"
         }
-    elif step == 1:
+
+    if step == 1:
+        # Run a comprehensive, BI-aware analysis in one shot
         code = f"""
-import pandas as pd
-import json
+import pandas as pd, json, re
+
 try:
     df = pd.read_csv(r'{file_path}')
 except Exception:
     df = pd.read_csv(r'{file_path}', encoding='cp1255')
-num_cols = df.select_dtypes(include=['number']).columns.tolist()
-cat_cols = df.select_dtypes(exclude=['number']).columns.tolist()
-orders = len(df)
-res = {{'orders': orders, 'cols': len(df.columns)}}
-if num_cols:
-    res['num1'] = num_cols[0]
-    res['num1_sum'] = float(df[num_cols[0]].sum())
-if len(num_cols) > 1:
-    res['num2'] = num_cols[1]
-    res['num2_avg'] = float(df[num_cols[1]].mean())
-if cat_cols:
-    res['cat1'] = cat_cols[0]
-result = json.dumps(res)
+
+rows, cols_n = len(df), len(df.columns)
+
+# ── Classify columns ─────────────────────────────────────────────────
+ID_PATTERNS = re.compile(r'\\b(id|_id|code|key|num|number|index|row|no|#)\\b', re.I)
+
+def is_identifier(col, series):
+    if ID_PATTERNS.search(col):
+        return True
+    if series.dtype in ('int64', 'Int64') and series.nunique() == len(series):
+        return True  # all-unique int -> likely a key
+    return False
+
+all_num  = df.select_dtypes(include='number').columns.tolist()
+all_cat  = df.select_dtypes(exclude='number').columns.tolist()
+all_dt   = [c for c in df.columns if 'date' in c.lower() or 'time' in c.lower()]
+
+# Filter out identifiers from measures
+measures = [c for c in all_num if not is_identifier(c, df[c])]
+dims     = [c for c in all_cat if not is_identifier(c, df[c]) and df[c].nunique() <= 50]
+dates    = [c for c in all_dt if c in df.columns]
+
+res = {{'rows': rows, 'cols': cols_n, 'measures': measures, 'dims': dims, 'dates': dates}}
+
+# ── Basic stats for each measure ─────────────────────────────────────
+stats = {{}}
+for m in measures[:6]:
+    s = df[m].dropna()
+    stats[m] = {{'sum': float(s.sum()), 'mean': float(s.mean()), 'min': float(s.min()), 'max': float(s.max()), 'count': int(len(s))}}
+res['stats'] = stats
+
+# ── Cross-tabulations (measure × dimension) ──────────────────────────
+xtabs = {{}}
+if measures and dims:
+    for dm in dims[:2]:
+        for ms in measures[:2]:
+            key = f'{{dm}}__{{ms}}'
+            grp = df.groupby(dm, observed=True)[ms].sum().sort_values(ascending=False)
+            xtabs[key] = {{'top': grp.head(5).to_dict(), 'bottom': grp.tail(3).to_dict()}}
+res['xtabs'] = xtabs
+
+# ── Top/bottom values per measure ────────────────────────────────────
+if dims:
+    dim0 = dims[0]
+    for ms in measures[:2]:
+        grp = df.groupby(dim0, observed=True)[ms].sum().sort_values(ascending=False)
+        res[f'top_{{ms}}_by_{{dim0}}'] = grp.head(1).to_dict()
+        res[f'pct_top_{{ms}}'] = round(grp.iloc[0] / grp.sum() * 100, 1) if len(grp) > 0 else 0
+
+# ── Category distribution ─────────────────────────────────────────────
+if dims:
+    dim0 = dims[0]
+    vc = df[dim0].value_counts(normalize=True).head(5)
+    res['dim0_dist'] = {{dim0: vc.round(3).to_dict()}}
+
+result = json.dumps(res, default=str)
 """
         return {
             "wants_tool": True,
             "tool_name": "run_python_analysis",
             "tool_args": code,
-            "text": "Thought: I'll run a dynamic analysis.\nAction: run_python_analysis\nAction Input: \n" + code
+            "text": f"Thought: Run BI analysis.\nAction: run_python_analysis\nAction Input:\n{code}"
         }
-    else:
-        last_obs = observations[-1].get("content", "")
-        m = re.search(r"\{.*\}", last_obs, re.DOTALL)
-        
-        try:
-            res = json.loads(m.group(0)) if m else {'orders': 0, 'cols': 0}
-        except:
-            res = {'orders': 0, 'cols': 0}
-            
-        orders = res.get('orders', 0)
-        
-        kpis = []
-        charts = []
-        findings = [f"Analyzed {orders} rows and {res.get('cols', 0)} columns successfully."]
-        recs = ["Review the auto-generated charts to find interesting patterns.", "Use the filters to drill down into specific dates or categories."]
-        
-        kpis.append({"name": "Total Rows", "value": orders, "calculation": "COUNT()", "business_logic": "Total volume", "column": ""})
-        
-        if 'num1' in res:
-            kpis.append({"name": f"Total {res['num1']}", "value": res['num1_sum'], "calculation": f"SUM({res['num1']})", "business_logic": f"Sum of {res['num1']}", "column": res['num1']})
-            x_col = res.get('cat1', '')
-            charts.append({"title": f"{res['num1']} by {x_col}" if x_col else f"{res['num1']} Distribution", "type": "bar", "x": x_col, "y": f"SUM({res['num1']})", "color": None, "description": f"Displays total {res['num1']}."})
-            findings.append(f"The total {res['num1']} across the dataset is {res['num1_sum']:,.2f}.")
-            
-        if 'num2' in res:
-            kpis.append({"name": f"Avg {res['num2']}", "value": round(res['num2_avg'], 2), "calculation": f"AVG({res['num2']})", "business_logic": f"Average {res['num2']}", "column": res['num2']})
-            findings.append(f"The average {res['num2']} is {res['num2_avg']:,.2f}.")
-            
-        final_json = {
-            "dataset_name": "Dynamic Dashboard",
-            "summary": f"Automatically generated BI dashboard for your uploaded dataset containing {orders} rows.",
-            "shape": {"rows": orders, "columns": res.get('cols', 0)},
-            "column_types": {},
-            "kpis": kpis,
-            "charts": charts,
-            "key_findings": findings,
-            "recommendations": recs
-        }
-        
-        return {
-            "wants_tool": False,
-            "tool_name": None,
-            "tool_args": None,
-            "text": json.dumps(final_json, ensure_ascii=False)
-        }
+
+    # ── Step 2+: Build the final BI output from computed results ─────────
+    last_obs = observations[-1].get("content", "")
+    m = re.search(r"\{.*\}", last_obs, re.DOTALL)
+    try:
+        res = json.loads(m.group(0)) if m else {}
+    except Exception:
+        res = {}
+
+    rows       = res.get("rows", 0)
+    cols_n     = res.get("cols", 0)
+    measures   = res.get("measures", [])
+    dims       = res.get("dims", [])
+    dates      = res.get("dates", [])
+    stats      = res.get("stats", {})
+    xtabs      = res.get("xtabs", {})
+
+    kpis    = []
+    charts  = []
+    findings = []
+    recs    = []
+
+    # ── KPIs (only from meaningful measures) ─────────────────────────────
+    kpis.append({
+        "name": "Total Records",
+        "value": rows,
+        "calculation": "COUNT()",
+        "business_logic": "Total volume of records in the dataset.",
+        "column": ""
+    })
+
+    kpi_count = 1
+    for col in measures[:3]:
+        if col not in stats:
+            continue
+        s = stats[col]
+        col_label = col.replace("_", " ").title()
+        kpis.append({
+            "name": f"Total {col_label}",
+            "value": round(s["sum"], 2),
+            "calculation": f"SUM({col})",
+            "business_logic": f"Total cumulative {col_label} — key volume indicator.",
+            "column": col
+        })
+        kpi_count += 1
+        if kpi_count >= 3:
+            break
+
+    # Add an average KPI for the primary measure
+    if measures and measures[0] in stats:
+        col = measures[0]
+        s = stats[col]
+        col_label = col.replace("_", " ").title()
+        kpis.append({
+            "name": f"Avg {col_label}",
+            "value": round(s["mean"], 2),
+            "calculation": f"AVG({col})",
+            "business_logic": f"Average {col_label} per record — indicates typical magnitude.",
+            "column": col
+        })
+
+    # ── Charts ────────────────────────────────────────────────────────────
+    if dims and measures:
+        charts.append({
+            "title": f"{measures[0].replace('_', ' ').title()} by {dims[0].replace('_', ' ').title()}",
+            "type": "bar",
+            "x": dims[0],
+            "y": f"SUM({measures[0]})",
+            "color": None,
+            "description": f"Shows total {measures[0]} broken down by {dims[0]}."
+        })
+
+    if len(dims) >= 2 and measures:
+        charts.append({
+            "title": f"{measures[0].replace('_', ' ').title()} by {dims[1].replace('_', ' ').title()}",
+            "type": "bar",
+            "x": dims[1],
+            "y": f"SUM({measures[0]})",
+            "color": None,
+            "description": f"Compares {measures[0]} across {dims[1]} segments."
+        })
+
+    if dates and measures:
+        charts.append({
+            "title": f"{measures[0].replace('_', ' ').title()} Over Time",
+            "type": "line",
+            "x": dates[0],
+            "y": measures[0],
+            "color": None,
+            "description": f"Tracks {measures[0]} trend over time."
+        })
+
+    if dims:
+        charts.append({
+            "title": f"Distribution of {dims[0].replace('_', ' ').title()}",
+            "type": "pie",
+            "x": dims[0],
+            "y": "count",
+            "color": None,
+            "description": f"Proportion of records by {dims[0]}."
+        })
+
+    if len(measures) >= 2:
+        charts.append({
+            "title": f"{measures[0].replace('_', ' ').title()} vs {measures[1].replace('_', ' ').title()}",
+            "type": "scatter",
+            "x": measures[0],
+            "y": measures[1],
+            "color": dims[0] if dims else None,
+            "description": f"Reveals correlation between {measures[0]} and {measures[1]}."
+        })
+
+    # ── Key Findings (with real numbers) ─────────────────────────────────
+    findings.append(
+        f"The dataset contains {rows:,} records across {cols_n} columns, "
+        f"with {len(measures)} measurable business metrics and {len(dims)} categorical dimensions."
+    )
+
+    for col in measures[:2]:
+        if col not in stats:
+            continue
+        s = stats[col]
+        col_label = col.replace("_", " ").title()
+        findings.append(
+            f"Total {col_label} = {s['sum']:,.2f} (avg {s['mean']:,.2f} per record, "
+            f"range {s['min']:,.2f} – {s['max']:,.2f})."
+        )
+
+    # Cross-tab insight
+    if xtabs:
+        first_key = next(iter(xtabs))
+        dm, ms = first_key.split("__")
+        top_data = xtabs[first_key].get("top", {})
+        if top_data:
+            top_cat = next(iter(top_data))
+            top_val = list(top_data.values())[0]
+            total = sum(top_data.values())
+            pct = round(top_val / total * 100, 1) if total else 0
+            dm_label = dm.replace("_", " ").title()
+            ms_label = ms.replace("_", " ").title()
+            findings.append(
+                f"Top {dm_label} by {ms_label}: '{top_cat}' accounts for "
+                f"{top_val:,.2f} ({pct}% of the top-5 total)."
+            )
+
+    if dims:
+        dim0 = dims[0]
+        dim0_label = dim0.replace("_", " ").title()
+        dim_dist_key = f"dim0_dist"
+        dim_dist = res.get(dim_dist_key, {}).get(dim0, {})
+        if dim_dist:
+            top_dim_val = next(iter(dim_dist))
+            top_dim_pct = round(list(dim_dist.values())[0] * 100, 1)
+            findings.append(
+                f"'{top_dim_val}' is the most frequent {dim0_label}, "
+                f"representing {top_dim_pct}% of all records."
+            )
+
+    if len(measures) >= 2:
+        col1, col2 = measures[0], measures[1]
+        if col1 in stats and col2 in stats:
+            findings.append(
+                f"Secondary metric '{col2.replace('_', ' ').title()}' has a mean of "
+                f"{stats[col2]['mean']:,.2f} and total of {stats[col2]['sum']:,.2f}."
+            )
+
+    # ── Recommendations ───────────────────────────────────────────────────
+    if dims and measures:
+        dim_label = dims[0].replace("_", " ").title()
+        ms_label = measures[0].replace("_", " ").title()
+        recs.append(
+            f"Focus resources on the top-performing {dim_label} segments that drive "
+            f"the highest {ms_label} — use the Charts tab to identify them visually."
+        )
+    recs.append(
+        "Apply the sidebar filters to drill into specific segments or date ranges "
+        "and compare performance across sub-groups."
+    )
+    if len(measures) >= 2:
+        recs.append(
+            f"Investigate the relationship between {measures[0].replace('_',' ').title()} "
+            f"and {measures[1].replace('_',' ').title()} using the Scatter chart — "
+            "strong correlations can inform pricing or resource allocation strategies."
+        )
+
+    final_json = {
+        "dataset_name": "Business Intelligence Dashboard",
+        "summary": (
+            f"This dataset contains {rows:,} records and {cols_n} columns. "
+            f"It has {len(measures)} numeric business metrics ({', '.join(measures[:3])}) "
+            f"and {len(dims)} categorical dimensions ({', '.join(dims[:3])}) "
+            f"suitable for BI analysis."
+        ),
+        "shape": {"rows": rows, "columns": cols_n},
+        "column_types": {c: "measure" for c in measures} | {c: "dimension" for c in dims} | {c: "datetime" for c in dates},
+        "kpis": kpis,
+        "charts": charts,
+        "key_findings": [f for f in findings if f],
+        "recommendations": recs
+    }
+
+    return {
+        "wants_tool": False, "tool_name": None, "tool_args": None,
+        "text": json.dumps(final_json, ensure_ascii=False)
+    }
 
 # ---------------------------------------------------------------------------
 # Main Agent Loop
@@ -350,7 +596,7 @@ if __name__ == "__main__":
     print("FULL ANALYSIS (Data Analyst Mode)")
     print("=" * 60)
     answer2 = run_agent_loop(
-        user_input=f"Analyse the bakery orders dataset at '{DATA_PATH}'. "
+        user_input=f"Analyse the orders dataset at '{DATA_PATH}'. "
                     "What are the top insights for the manager?",
         system_prompt=SYSTEM_PROMPT,
         max_iterations=10,

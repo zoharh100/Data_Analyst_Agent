@@ -54,10 +54,10 @@ At the end of the process, return an executive summary in this structure:
 """
 
 # ---------------------------------------------------------------------------
-# Bakery-specific order-lookup agent prompt (used in Step 4 demo)
+# Domain-specific order-lookup agent prompt (used in demo scripts)
 # ---------------------------------------------------------------------------
-BAKERY_SYSTEM_PROMPT = """
-You are a helpful bakery AI assistant.
+ORDERS_SYSTEM_PROMPT = """
+You are a helpful data AI assistant.
 Use the provided tools to look up order information and answer customer queries.
 Always verify data using the tools before answering — do not guess.
 """

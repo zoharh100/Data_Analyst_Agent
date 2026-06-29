@@ -1,7 +1,7 @@
 """
 Step 3: Mock Data + Data Preparation
 =====================================
-Loads the bakery orders mock dataset (CSV), converts types,
+Loads the orders mock dataset (CSV), converts types,
 and computes derived columns (profit, profit_margin_pct).
 
 The 'orders_df' DataFrame is the shared "database" that all
@@ -68,7 +68,7 @@ MOCK_DATA_JSON = """
 
 def load_and_prepare_data(source: str = "json") -> pd.DataFrame:
     """
-    Load bakery order data and add derived columns.
+    Load order data and add derived columns.
 
     Parameters
     ----------
@@ -114,7 +114,7 @@ orders_df: pd.DataFrame = load_and_prepare_data()
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     df = load_and_prepare_data()
-    print("--- Bakery Orders (with derived columns) ---")
+    print("--- Orders (with derived columns) ---")
     print(df[["order_id", "product_type", "final_price", "profit", "profit_margin_pct", "status"]])
     print(f"\nTotal revenue:  ₪{df['final_price'].sum():,.2f}")
     print(f"Total profit:   ₪{df['profit'].sum():,.2f}")

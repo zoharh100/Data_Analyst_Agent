@@ -13,20 +13,50 @@ import sys
 
 def read_dataset_schema(file_path: str) -> str:
     """
-    Reads a CSV file and returns column names, data types,
-    and a small sample (first 5 rows) to inform the agent.
-
-    The intent is to keep the context window light — we only
-    send a summary/sample rather than the entire dataset.
+    Reads a CSV file and returns a rich schema profile to inform the agent.
+    Includes column names, dtypes, shape, sample rows, basic stats, and
+    value counts for categorical columns — enough for the agent to make
+    business-relevant decisions without reading the whole file.
     """
     try:
         df = pd.read_csv(file_path)
-        schema_info = (
-            f"Columns and Data types:\n{df.dtypes}\n\n"
-            f"Shape: {df.shape[0]} rows × {df.shape[1]} columns\n\n"
-            f"First 5 rows:\n{df.head()}"
-        )
-        return str(schema_info)
+        lines = []
+        lines.append(f"Shape: {df.shape[0]} rows × {df.shape[1]} columns\n")
+
+        lines.append("Columns and Data types:")
+        lines.append(str(df.dtypes))
+        lines.append("")
+
+        lines.append("First 5 rows:")
+        lines.append(str(df.head()))
+        lines.append("")
+
+        # Basic stats for numeric columns
+        num_cols = df.select_dtypes(include="number").columns.tolist()
+        if num_cols:
+            lines.append("Numeric column statistics (sum / mean / min / max):")
+            for col in num_cols:
+                s = df[col].dropna()
+                lines.append(
+                    f"  {col}: sum={s.sum():.2f}, mean={s.mean():.2f}, "
+                    f"min={s.min():.2f}, max={s.max():.2f}, non-null={len(s)}"
+                )
+            lines.append("")
+
+        # Value counts for low-cardinality columns (good dimensions)
+        cat_cols = df.select_dtypes(exclude="number").columns.tolist()
+        if cat_cols:
+            lines.append("Categorical column distributions (top 10 values):")
+            for col in cat_cols:
+                nuniq = df[col].nunique()
+                if nuniq <= 50:
+                    vc = df[col].value_counts().head(10)
+                    lines.append(f"  {col} ({nuniq} unique values): {vc.to_dict()}")
+                else:
+                    lines.append(f"  {col}: {nuniq} unique values (high cardinality — likely text/id)")
+            lines.append("")
+
+        return "\n".join(lines)
     except Exception as e:
         return f"Error reading file: {str(e)}"
 
@@ -48,7 +78,7 @@ def run_python_analysis(code_string: str) -> str:
         sys.stdout = captured_output = io.StringIO()
 
         local_vars: dict = {}
-        exec(code_string, globals(), local_vars)  # noqa: S102
+        exec(code_string, local_vars)  # noqa: S102
 
         sys.stdout = old_stdout
         output_text = captured_output.getvalue()

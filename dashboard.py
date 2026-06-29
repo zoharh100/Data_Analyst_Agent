@@ -30,7 +30,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from agent_loop import run_agent_loop
+from agent_loop import run_agent_loop, get_last_llm_status
 from agent_tools import read_dataset_schema, run_python_analysis
 from dashboard_config import generate_dashboard_config, profile_dataset
 
@@ -294,18 +294,74 @@ def save_df_to_tmp(df: pd.DataFrame) -> str:
 # ─────────────────────────────────────────────────────────────
 ANALYSIS_SYSTEM_PROMPT = """
 <Persona>
-You are an expert Data Analyst AI capable of writing accurate Python code.
+You are a Senior BI Consultant and Data Analyst with 15 years of experience building executive dashboards.
+Your role is to deeply understand a dataset, identify what the business actually cares about,
+and produce a dashboard report with actionable insights — not generic statistics.
 </Persona>
 
 <Goal>
-Explore the provided dataset and produce a comprehensive BI report.
-Your report will be rendered directly inside a Streamlit dashboard.
+Analyse the provided dataset and produce a comprehensive, business-relevant BI report.
+Think like an executive asking: "What does this data tell me that I can act on?"
 </Goal>
 
 <Tools>
-1. read_dataset_schema(file_path)  - Returns column names, dtypes, shape, sample rows.
-2. run_python_analysis(code_string) - Executes Python; save final answer in 'result'.
+1. read_dataset_schema(file_path)  - Returns column names, dtypes, shape, and sample rows.
+2. run_python_analysis(code_string) - Executes Python; save your final answer in a variable named 'result'.
 </Tools>
+
+<MandatoryWorkflow>
+You MUST follow these steps in order. Do NOT skip any step.
+
+STEP 1 — Schema understanding:
+  Use read_dataset_schema to get column names, types, and sample data.
+  Identify:
+    - Which columns are MEASURES (numeric columns to aggregate: revenue, cost, quantity, duration, etc.)
+    - Which columns are DIMENSIONS (categories to group by: status, type, region, product, etc.)
+    - Which columns are IDENTIFIERS to IGNORE (IDs, codes, row numbers — never use these as KPIs)
+    - Which columns are DATES/TIMESTAMPS
+
+STEP 2 — Deep statistical analysis:
+  Use run_python_analysis to compute ALL of the following:
+    a) For each MEASURE column: total sum, mean, min, max, and count of non-null values
+    b) For each DIMENSION column: value counts and distribution percentages
+    c) At least ONE cross-tabulation: e.g. SUM(measure) grouped by dimension
+    d) Any trends over time if a date column exists
+    e) Identify outliers, top-N, bottom-N values
+
+STEP 3 — Business insight extraction:
+  Based on the actual computed numbers, identify:
+    - The 4 most impactful KPIs for a manager to see at a glance
+    - 3–5 charts that reveal the most important patterns
+    - 3–5 specific, data-backed key findings with REAL NUMBERS from your analysis
+    - 2–3 actionable recommendations based on the findings
+
+STEP 4 — Output:
+  Produce the final JSON. Every value in "kpis" must come from STEP 2 computed results — never guess.
+</MandatoryWorkflow>
+
+<KPI Selection Rules>
+GOOD KPI examples:
+  - Total Revenue, Total Profit, Average Order Value, Conversion Rate, # of Customers
+  - % of Orders Delivered, Avg Processing Time, Top Category by Sales, Cancellation Rate
+
+BAD KPI examples (NEVER use these):
+  - Anything with "ID" in the name (customer_id, order_id, row_id)
+  - Raw row counts as the only KPI (too generic)
+  - Column names that are codes or identifiers
+
+Choose KPIs that answer real business questions a manager would ask.
+</KPI Selection Rules>
+
+<ChartSelectionRules>
+Choose charts based on what the data actually contains:
+  - CATEGORY column + MEASURE column → bar chart (grouped by category)
+  - DATE column + MEASURE column → line chart (trend over time)
+  - Two MEASURE columns → scatter chart (correlation)
+  - CATEGORY column alone → pie chart (distribution/share)
+  - Single MEASURE column → histogram (distribution)
+  - Multiple MEASURE columns → heatmap (correlation matrix)
+Never suggest a chart where a required column doesn't exist in the dataset.
+</ChartSelectionRules>
 
 <Process>
 Work in a ReAct loop:
@@ -313,58 +369,64 @@ Work in a ReAct loop:
   Action:       Tool name
   Action Input: Argument
   Observation:  [Tool result — do NOT generate this yourself]
-Repeat until ready for the final answer.
+Repeat until you have completed all 4 steps of the MandatoryWorkflow.
 </Process>
 
 <Constraints>
-- Do NOT load or print the entire file — use read_dataset_schema first.
-- Self-correct on Python errors: use the error to fix the code and retry.
+- Do NOT use ID columns or identifier columns as KPIs or chart axes.
+- Self-correct on Python errors: use the error message to fix the code and retry.
+- All KPI values must be real computed numbers from your Python analysis — never invent values.
+- Key findings must contain specific numbers (e.g. "Revenue from category X is 45% of total").
 - Max 10 iterations.
 </Constraints>
 
-<Output Format>
-When ready, output a JSON object (and NOTHING else outside the JSON) with this exact schema:
+<OutputFormat>
+When all 4 workflow steps are complete, output ONLY a valid JSON object with this exact schema.
+Do NOT include any text before or after the JSON:
 
 {
-  "dataset_name": "<inferred descriptive name>",
-  "summary": "<2-3 sentence plain-English summary of what the dataset contains>",
+  "dataset_name": "<concise, descriptive name inferred from the data>",
+  "summary": "<2-3 sentences describing what this dataset contains and its business context>",
   "shape": {"rows": <int>, "columns": <int>},
   "column_types": {
-    "<col_name>": "<numeric|datetime|category|text|id>",
+    "<col_name>": "<measure|dimension|datetime|identifier|text>",
     ...
   },
   "kpis": [
     {
-      "name": "<short human label>",
-      "value": <number or string>,
-      "calculation": "<e.g. SUM(col) or COUNT(col)>",
-      "business_logic": "<why this matters>",
-      "column": "<source column name>"
+      "name": "<short business-friendly label, e.g. 'Total Revenue'>",
+      "value": <actual computed number or string>,
+      "calculation": "<e.g. SUM(revenue), AVG(order_value), COUNT(DISTINCT customer_id)>",
+      "business_logic": "<one sentence: why does a manager care about this?>",
+      "column": "<exact source column name>"
     }
   ],
   "charts": [
     {
-      "title": "<chart title>",
+      "title": "<descriptive chart title>",
       "type": "<bar|line|pie|scatter|histogram|heatmap>",
-      "x": "<column name>",
-      "y": "<column name or aggregation expression>",
-      "color": "<optional column name for color grouping or null>",
-      "description": "<1-sentence chart insight>"
+      "x": "<exact column name>",
+      "y": "<exact column name or aggregation like SUM(revenue)>",
+      "color": "<optional column name for grouping, or null>",
+      "description": "<one sentence describing the key insight this chart reveals>"
     }
   ],
   "key_findings": [
-    "<finding 1>",
-    "<finding 2>",
-    "<finding 3>"
+    "<Finding with a specific number, e.g. 'Wedding cakes account for 42% of total revenue at $3,240'>",
+    "<Finding 2 with actual data>",
+    "<Finding 3 with actual data>",
+    "<Finding 4 with actual data>",
+    "<Finding 5 with actual data>"
   ],
   "recommendations": [
-    "<recommendation 1>",
-    "<recommendation 2>"
+    "<Specific, actionable recommendation based on the findings>",
+    "<Recommendation 2>",
+    "<Recommendation 3>"
   ]
 }
 
-Produce exactly 4 KPIs and 3-5 charts. Choose charts that are most meaningful for this specific dataset.
-</Output Format>
+Produce exactly 4 KPIs and 3-5 charts.
+</OutputFormat>
 """
 
 
@@ -393,18 +455,60 @@ def run_full_analysis(file_path: str, file_hash: int) -> dict:
         sys.stdout = original_stdout
 
     trace = captured.getvalue()
+    llm_status = get_last_llm_status()
 
-    # Extract JSON from the agent's response
-    json_match = re.search(r'\{.*\}', raw_answer, re.DOTALL)
-    if json_match:
+    # Write raw output to a debug file for inspection
+    _debug_path = os.path.join(os.path.dirname(__file__), "_agent_debug.txt")
+    with open(_debug_path, "w", encoding="utf-8") as _f:
+        _f.write(f"=== RAW ANSWER ===\n{raw_answer}\n\n=== LLM STATUS ===\n{llm_status}\n\n=== TRACE ===\n{trace}\n")
+
+    # ── Robust JSON extraction ────────────────────────────────────────────
+    # Try 1: JSON inside a ```json ... ``` code block (common LLM pattern)
+    code_block_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', raw_answer, re.DOTALL)
+    if code_block_match:
         try:
-            result = json.loads(json_match.group(0))
+            result = json.loads(code_block_match.group(1))
             result["__trace__"] = trace
+            result["__llm_error__"] = llm_status.get("error", "")
+            result["__used_simulator__"] = llm_status.get("used_simulator", False)
             return result
         except json.JSONDecodeError:
             pass
 
-    # Fallback: return minimal structure with the raw text
+    # Try 2: Find the outermost { ... } by scanning bracket depth
+    def _extract_outermost_json(text: str):
+        depth = 0
+        start = None
+        for i, ch in enumerate(text):
+            if ch == '{':
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0 and start is not None:
+                    candidate = text[start:i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        start = None  # keep scanning for the next candidate
+        return None
+
+    _ANALYSIS_KEYS = {"key_findings", "kpis", "charts", "dataset_name", "summary", "recommendations"}
+
+    parsed = _extract_outermost_json(raw_answer)
+    if parsed is not None and isinstance(parsed, dict):
+        # Reject API error dicts — they have an "error" key but none of the expected analysis keys
+        is_error_dict = "error" in parsed and not any(k in parsed for k in _ANALYSIS_KEYS)
+        if not is_error_dict:
+            parsed["__trace__"] = trace
+            parsed["__llm_error__"] = llm_status.get("error", "")
+            parsed["__used_simulator__"] = llm_status.get("used_simulator", False)
+            return parsed
+
+    # Fallback: the LLM returned free text — wrap it so the dashboard still shows something
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', raw_answer.strip()) if s.strip()]
+    findings = sentences[:8] if sentences else [raw_answer[:600]]
     return {
         "dataset_name": "Loaded Dataset",
         "summary": raw_answer[:500] if raw_answer else "Analysis complete.",
@@ -412,10 +516,12 @@ def run_full_analysis(file_path: str, file_hash: int) -> dict:
         "column_types": {},
         "kpis": [],
         "charts": [],
-        "key_findings": [raw_answer],
+        "key_findings": findings,
         "recommendations": [],
         "__trace__": trace,
         "__raw__": raw_answer,
+        "__llm_error__": llm_status.get("error", ""),
+        "__used_simulator__": llm_status.get("used_simulator", False),
     }
 
 
@@ -650,15 +756,20 @@ with st.sidebar:
     )
 
     # Demo data button
-    if st.button("🍰 Load demo (bakery orders)", width='stretch'):
+    if st.button("🍰 Load demo (orders)", width='stretch'):
         demo_path = os.path.join(os.path.dirname(__file__), "data", "orders.csv")
         if os.path.exists(demo_path):
-            st.session_state["df"] = pd.read_csv(demo_path)
+            demo_df = pd.read_csv(demo_path)
+            # Apply same type-cleaning as the file uploader path
+            for _col in demo_df.columns:
+                if demo_df[_col].dtype == 'object':
+                    demo_df[_col] = demo_df[_col].astype(str)
+            st.session_state["df"] = demo_df
             st.session_state["filename"] = "orders.csv"
             st.session_state["analysis_done"] = False
             st.session_state["agent_analysis"] = None
             st.session_state["dash_config"] = None
-            st.session_state["tmp_csv_path"] = demo_path
+            st.session_state["tmp_csv_path"] = save_df_to_tmp(demo_df)
             st.rerun()
 
     st.markdown("---")
@@ -702,8 +813,9 @@ with st.sidebar:
     st.markdown("### ⚙️ Agent Settings")
     api_key_input = st.text_input(
         "Gemini API Key", 
+        value="",
         type="password", 
-        help="Required for dynamic analysis of custom datasets. If left empty, the app uses a simulated Bakery dataset."
+        help="Required for dynamic analysis of custom datasets. If left empty, the app uses a simulated fallback dataset."
     )
     if api_key_input:
         import os
@@ -744,6 +856,11 @@ if uploaded is not None:
         # New file uploaded — reset state
         df_loaded = load_uploaded_file(uploaded)
         
+        # Prevent PyArrow serialization errors by ensuring object columns are strictly strings
+        for col in df_loaded.columns:
+            if df_loaded[col].dtype == 'object':
+                df_loaded[col] = df_loaded[col].astype(str)
+
         # Try to parse datetime columns
         for col in df_loaded.columns:
             if "date" in col.lower() or "time" in col.lower():
@@ -801,7 +918,7 @@ if st.session_state["df"] is None:
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🍰 Try with demo bakery dataset", width='stretch', type="secondary"):
+        if st.button("🍰 Try with demo orders dataset", width='stretch', type="secondary"):
             demo_path = os.path.join(os.path.dirname(__file__), "data", "orders.csv")
             if os.path.exists(demo_path):
                 df_demo = pd.read_csv(demo_path)
@@ -903,9 +1020,16 @@ if not st.session_state["analysis_done"]:
         # Step 3: Full agent analysis
         prog_bar.progress(50, text="Step 3/4 — Running AI analysis (this may take a moment)…")
         api_key = os.environ.get('GOOGLE_API_KEY', '')
-        file_hash = hash(f"{st.session_state['filename']}_{len(df_raw)}_{list(df_raw.columns)}_{api_key}_v3")
+        
+        # Force the demo dataset to skip the LLM and use the local simulator
+        if st.session_state.get('filename') == "orders.csv":
+            api_key = ""
+            for k in ["GOOGLE_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"]:
+                if k in os.environ:
+                    del os.environ[k]
+                
+        file_hash = hash(f"{st.session_state['filename']}_{len(df_raw)}_{list(df_raw.columns)}_{api_key}_v4")
         analysis = run_full_analysis(tmp_path, file_hash)
-
         # Step 4: Store results
         prog_bar.progress(90, text="Step 4/4 — Building dashboard…")
         st.session_state["agent_analysis"] = analysis
@@ -955,6 +1079,23 @@ with h_col3:
         st.download_button("⬇️ Export", csv_bytes, f"{filename}_export.csv", "text/csv")
 
 st.markdown("---")
+
+# ── LLM status banner (shown when simulator is active or API failed) ──
+if analysis.get("__used_simulator__"):
+    llm_err = analysis.get("__llm_error__", "")
+    if llm_err:
+        st.markdown(
+            f'<div style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.45);'
+            f'border-radius:12px;padding:14px 18px;margin-bottom:16px;">'
+            f'<span style="color:#f87171;font-weight:700;">⚠️ Gemini API Error — Using Fallback Simulator</span><br>'
+            f'<code style="color:#fca5a5;font-size:0.82rem;">{llm_err[:600]}</code><br>'
+            f'<span style="color:#fcd34d;font-size:0.78rem;">'
+            f'Fix the API error above and click 🔄 Re-analyse to get real LLM insights. '
+            f'Check the Debug tab for the full error.</span></div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.info("ℹ️ No API key configured — showing results from the built-in BI simulator.")
 
 # ── Summary banner ──────────────────────────────────────────
 summary_text = analysis.get("summary", "")
@@ -1015,8 +1156,13 @@ with tab_overview:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Key Findings ──────────────────────────────────────
-    findings = analysis.get("key_findings", [])
-    recommendations = analysis.get("recommendations", [])
+    findings = analysis.get("key_findings") or analysis.get("findings") or analysis.get("insights") or []
+    if isinstance(findings, str):
+        findings = [findings]
+        
+    recommendations = analysis.get("recommendations") or []
+    if isinstance(recommendations, str):
+        recommendations = [recommendations]
 
     f_col, r_col = st.columns(2)
     with f_col:
@@ -1247,7 +1393,10 @@ with tab_chat:
         unsafe_allow_html=True,
     )
 
-    tmp_path = st.session_state.get("tmp_csv_path", "data/orders.csv")
+    tmp_path = st.session_state.get("tmp_csv_path", "")
+    if not tmp_path:
+        st.warning("⚠️ No dataset loaded. Please upload a CSV file in the sidebar first.")
+        st.stop()
 
     # Example prompts derived from dataset structure
     num_cols_list = [c for c, r in roles.items() if r == "numeric"]
@@ -1348,11 +1497,22 @@ with tab_debug:
 
     st.markdown('<p class="section-title">🔧 Debug & Raw Analysis</p>', unsafe_allow_html=True)
 
+    # ── LLM Status ────────────────────────────────────────────────────────
+    llm_err = analysis.get("__llm_error__", "")
+    used_sim = analysis.get("__used_simulator__", False)
+
+    if llm_err:
+        st.error(f"**🔴 LLM API Error (Gemini call failed)**\n\n```\n{llm_err}\n```")
+    elif used_sim:
+        st.warning("**⚠️ Fallback Simulator Active** — No API key configured. Results are rule-based, not from a real LLM.")
+    else:
+        st.success("**✅ Gemini LLM** — Analysis was produced by the real AI model.")
+
     d1, d2 = st.columns(2)
 
     with d1:
         st.markdown("**Agent Analysis JSON**")
-        display_analysis = {k: v for k, v in analysis.items() if k not in ("__trace__", "__raw__")}
+        display_analysis = {k: v for k, v in analysis.items() if not k.startswith("__")}
         st.json(display_analysis)
 
     with d2:

@@ -187,7 +187,7 @@ def _mock_llm_response(metadata: dict) -> str:
 
 
 def _deterministic_config(metadata: dict) -> dict:
-    """Last-resort fallback — returns a hardcoded config for the bakery dataset."""
+    """Last-resort fallback — returns a hardcoded config for the demo orders dataset."""
     return {
         "kpis": [
             {"name": "Total Revenue", "calculation": "SUM(final_price)", "business_logic": "Measures total sales income"},
