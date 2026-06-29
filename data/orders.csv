@@ -1,16 +1,116 @@
-order_id,order_date,product_type,ingredients_cost,final_price,status,customer_notes
-1001,2026-06-15,Wedding Cake - Multifloor,120.50,350.00,Delivered,"Very impressive, should be labeled 'lower floor first'"
-1002,2026-06-16,Birthday Cake - Chocolate,45.00,180.00,In Progress,"Urgent delivery needed, should arrive before the party starts"
-1003,2026-06-17,Gluten Free Cake,150.00,420.00,Pending,"Celiac, multiple egg allergies (gluten free). Delivery by 16:00."
-1004,2026-06-18,Groom's Cake - Carrot,90.00,280.00,Cancelled,"Client changed date due to unforeseen circumstances"
-1005,2026-06-19,Wedding Cake - Multifloor,135.00,380.00,Delivered,"Beautiful work, client very happy"
-1006,2026-06-20,Birthday Cake - Vanilla,50.00,190.00,Delivered,"Please add Happy Birthday inscription"
-1007,2026-06-21,Groom's Cake - Chocolate,80.00,260.00,In Progress,"Rush order, needed by evening"
-1008,2026-06-22,Gluten Free Cake,160.00,440.00,Pending,"Nut allergy as well, please verify ingredients"
-1009,2026-06-23,Wedding Cake - Multifloor,145.00,410.00,Delivered,"Client requested extra tier added last minute"
-1010,2026-06-24,Birthday Cake - Strawberry,55.00,200.00,Cancelled,"Client cancelled, rescheduled for next month"
-1011,2026-06-25,Birthday Cake - Chocolate,48.00,185.00,Delivered,"Perfect, exactly as ordered"
-1012,2026-06-26,Wedding Cake - Single Tier,95.00,290.00,In Progress,"Small intimate wedding, minimalist design"
-1013,2026-06-27,Groom's Cake - Red Velvet,85.00,270.00,Delivered,"Excellent quality, repeat customer"
-1014,2026-06-28,Gluten Free Cake,155.00,430.00,Pending,"Client confirmed pickup time 15:00"
-1015,2026-06-29,Birthday Cake - Vanilla,52.00,195.00,Delivered,"Child's birthday, fondant decorations requested"
+order_id,order_date,product_type,ingredients_cost,final_price,status,customer_notes,profit,profit_margin_pct
+1001,2026-06-15 00:00:00,Laptop Pro 15-inch,1200.5,1800.0,Delivered,"Great laptop, fast delivery",599.5,33.30555555555556
+1002,2026-06-16 00:00:00,Wireless Headphones,45.0,180.0,In Progress,Urgent delivery needed before trip,135.0,75.0
+1003,2026-06-17 00:00:00,Smartphone 128GB,350.0,620.0,Pending,Please include screen protector,270.0,43.54838709677419
+1004,2026-06-18 00:00:00,Mechanical Keyboard,90.0,180.0,Cancelled,Client changed mind on switches,90.0,50.0
+1005,2026-06-19 00:00:00,Laptop Pro 15-inch,1200.0,1800.0,Delivered,Perfect for development work,600.0,33.33333333333333
+1006,2026-06-20 00:00:00,Gaming Mouse,50.0,120.0,Delivered,Good tracking speed,70.0,58.333333333333336
+1007,2026-06-21 00:00:00,4K Monitor,280.0,450.0,In Progress,"Rush order, needed for home office setup",170.0,37.77777777777778
+1008,2026-06-22 00:00:00,Smartphone 128GB,360.0,640.0,Pending,Verify storage size before shipping,280.0,43.75
+1009,2026-06-23 00:00:00,Laptop Pro 15-inch,1245.0,1850.0,Delivered,Requested extra RAM upgrade last minute,605.0,32.7027027027027
+1010,2026-06-24 00:00:00,Bluetooth Speaker,55.0,120.0,Cancelled,"Client cancelled, bought locally instead",65.0,54.16666666666666
+1011,2026-06-25 00:00:00,Wireless Headphones,48.0,185.0,Delivered,Excellent sound quality,137.0,74.05405405405405
+1012,2026-06-26 00:00:00,Tablet 10-inch,195.0,350.0,In Progress,Include stylus pen,155.0,44.285714285714285
+1013,2026-06-27 00:00:00,Smartwatch,85.0,270.0,Delivered,"Great build quality, repeat customer",185.0,68.51851851851852
+1014,2026-06-28 00:00:00,Smartphone 128GB,355.0,630.0,Pending,Client confirmed pickup time 15:00,275.0,43.65079365079365
+1015,2026-06-29 00:00:00,Gaming Mouse,52.0,125.0,Delivered,Included RGB lighting is perfect,73.0,58.4
+1016,2026-06-30,Bluetooth Speaker,71.29,161.32,Delivered,Include receipt,,
+1017,2026-07-01,Bluetooth Speaker,69.05,131.06,Delivered,Include receipt,,
+1018,2026-07-01,Laptop Pro 15-inch,1210.9,1812.84,In Progress,Include receipt,,
+1019,2026-07-02,Gaming Mouse,54.59,150.97,Delivered,Excellent quality,,
+1020,2026-07-03,Wireless Headphones,41.64,224.71,Delivered,Fast shipping,,
+1021,2026-07-03,Laptop Pro 15-inch,1215.2,1812.85,Delivered,Client requested changes,,
+1022,2026-07-04,4K Monitor,275.53,472.75,Pending,,,
+1023,2026-07-05,4K Monitor,284.33,469.52,Delivered,Standard delivery,,
+1024,2026-07-05,Tablet 10-inch,198.03,368.65,Pending,Will buy again,,
+1025,2026-07-05,Smartwatch,99.98,275.6,Delivered,Return requested,,
+1026,2026-07-06,4K Monitor,276.73,465.35,Delivered,Standard delivery,,
+1027,2026-07-07,Bluetooth Speaker,45.45,121.26,Delivered,Will buy again,,
+1028,2026-07-07,Gaming Mouse,43.79,154.5,Delivered,Standard delivery,,
+1029,2026-07-08,Smartwatch,94.0,312.96,In Progress,Client requested changes,,
+1030,2026-07-08,Tablet 10-inch,201.66,370.87,Delivered,Standard delivery,,
+1031,2026-07-08,Smartwatch,78.99,275.15,In Progress,Rush order,,
+1032,2026-07-09,Mechanical Keyboard,99.96,188.25,Delivered,Rush order,,
+1033,2026-07-10,Mechanical Keyboard,107.94,199.76,Pending,Fast shipping,,
+1034,2026-07-11,Wireless Headphones,39.86,208.53,Cancelled,Include receipt,,
+1035,2026-07-11,Tablet 10-inch,209.14,392.27,Delivered,Fast shipping,,
+1036,2026-07-11,Wireless Headphones,48.19,183.46,Delivered,Client requested changes,,
+1037,2026-07-12,Bluetooth Speaker,57.79,142.03,Delivered,Great product,,
+1038,2026-07-13,Wireless Headphones,42.21,187.18,Delivered,Client requested changes,,
+1039,2026-07-13,Bluetooth Speaker,63.1,144.98,Pending,Great product,,
+1040,2026-07-14,Tablet 10-inch,202.84,378.12,In Progress,Standard delivery,,
+1041,2026-07-15,Smartphone 128GB,354.02,676.63,In Progress,Excellent quality,,
+1042,2026-07-16,Tablet 10-inch,197.37,371.52,In Progress,Great product,,
+1043,2026-07-17,Wireless Headphones,57.95,209.7,Delivered,Great product,,
+1044,2026-07-17,Smartwatch,80.74,306.3,Delivered,Standard delivery,,
+1045,2026-07-18,4K Monitor,276.26,493.19,Cancelled,Great product,,
+1046,2026-07-18,Smartphone 128GB,361.63,634.31,Delivered,Will buy again,,
+1047,2026-07-18,Wireless Headphones,47.13,227.47,Pending,Will buy again,,
+1048,2026-07-18,Laptop Pro 15-inch,1197.95,1848.67,In Progress,Fast shipping,,
+1049,2026-07-19,Gaming Mouse,48.1,167.9,Pending,Great product,,
+1050,2026-07-20,Smartwatch,81.0,317.71,In Progress,Gift wrap requested,,
+1051,2026-07-21,Smartwatch,75.39,300.58,Pending,Will buy again,,
+1052,2026-07-21,Tablet 10-inch,196.83,390.64,Delivered,Will buy again,,
+1053,2026-07-22,4K Monitor,285.55,461.38,In Progress,Great product,,
+1054,2026-07-22,Wireless Headphones,42.26,219.71,In Progress,Will buy again,,
+1055,2026-07-23,Tablet 10-inch,206.92,390.29,Delivered,Standard delivery,,
+1056,2026-07-24,Wireless Headphones,42.03,190.59,Delivered,Great product,,
+1057,2026-07-25,Laptop Pro 15-inch,1219.22,1819.76,Delivered,Include receipt,,
+1058,2026-07-25,Bluetooth Speaker,57.13,135.2,Delivered,Gift wrap requested,,
+1059,2026-07-25,Mechanical Keyboard,80.7,182.31,Delivered,Fast shipping,,
+1060,2026-07-26,Mechanical Keyboard,86.36,221.74,In Progress,,,
+1061,2026-07-27,4K Monitor,299.45,457.65,Delivered,Gift wrap requested,,
+1062,2026-07-28,Smartphone 128GB,361.89,672.86,Delivered,Gift wrap requested,,
+1063,2026-07-29,Laptop Pro 15-inch,1205.46,1812.8,Delivered,Standard delivery,,
+1064,2026-07-29,Laptop Pro 15-inch,1209.88,1822.79,Delivered,Include receipt,,
+1065,2026-07-29,Laptop Pro 15-inch,1206.96,1839.63,Delivered,Include receipt,,
+1066,2026-07-30,Gaming Mouse,64.08,160.25,Delivered,Client requested changes,,
+1067,2026-07-30,Gaming Mouse,40.27,168.69,Delivered,Include receipt,,
+1068,2026-07-30,Smartwatch,99.62,301.68,In Progress,Great product,,
+1069,2026-07-30,Tablet 10-inch,201.94,372.39,Delivered,Great product,,
+1070,2026-07-31,Smartphone 128GB,362.47,679.33,In Progress,Great product,,
+1071,2026-08-01,Tablet 10-inch,190.21,379.9,Delivered,Fast shipping,,
+1072,2026-08-01,Bluetooth Speaker,46.09,132.1,Delivered,Gift wrap requested,,
+1073,2026-08-01,Smartwatch,94.25,295.0,Delivered,Client requested changes,,
+1074,2026-08-01,Laptop Pro 15-inch,1207.13,1803.13,Delivered,Gift wrap requested,,
+1075,2026-08-01,Smartwatch,79.64,290.74,Delivered,Client requested changes,,
+1076,2026-08-01,Smartphone 128GB,360.28,675.51,Delivered,Excellent quality,,
+1077,2026-08-01,Smartphone 128GB,348.15,638.74,In Progress,Gift wrap requested,,
+1078,2026-08-02,Bluetooth Speaker,46.65,120.51,In Progress,Fast shipping,,
+1079,2026-08-03,4K Monitor,274.29,470.6,Pending,Will buy again,,
+1080,2026-08-03,Smartwatch,78.36,287.28,Delivered,Standard delivery,,
+1081,2026-08-04,Smartphone 128GB,345.64,663.77,Delivered,Standard delivery,,
+1082,2026-08-05,4K Monitor,275.98,478.52,In Progress,Great product,,
+1083,2026-08-05,Laptop Pro 15-inch,1199.63,1832.81,Delivered,Great product,,
+1084,2026-08-05,Laptop Pro 15-inch,1211.1,1825.31,In Progress,Will buy again,,
+1085,2026-08-05,Smartphone 128GB,358.94,632.78,Delivered,Client requested changes,,
+1086,2026-08-05,4K Monitor,282.22,451.82,Delivered,Gift wrap requested,,
+1087,2026-08-06,Mechanical Keyboard,101.78,183.18,In Progress,Include receipt,,
+1088,2026-08-06,Smartwatch,98.51,306.39,Delivered,Will buy again,,
+1089,2026-08-06,Laptop Pro 15-inch,1193.17,1812.56,Delivered,Rush order,,
+1090,2026-08-07,Tablet 10-inch,214.59,361.28,Delivered,Great product,,
+1091,2026-08-08,Bluetooth Speaker,56.64,129.71,In Progress,Rush order,,
+1092,2026-08-09,4K Monitor,298.29,455.9,In Progress,Fast shipping,,
+1093,2026-08-10,Tablet 10-inch,199.63,395.35,Pending,Return requested,,
+1094,2026-08-11,Tablet 10-inch,198.11,357.24,Delivered,Excellent quality,,
+1095,2026-08-12,Gaming Mouse,64.1,152.66,Delivered,Fast shipping,,
+1096,2026-08-13,Laptop Pro 15-inch,1206.87,1808.92,Cancelled,,,
+1097,2026-08-13,Tablet 10-inch,214.38,366.61,Delivered,Fast shipping,,
+1098,2026-08-14,Laptop Pro 15-inch,1210.95,1842.21,Delivered,Rush order,,
+1099,2026-08-15,Laptop Pro 15-inch,1191.97,1815.1,In Progress,Standard delivery,,
+1100,2026-08-15,Mechanical Keyboard,80.46,201.42,In Progress,Client requested changes,,
+1101,2026-08-15,Tablet 10-inch,202.17,393.21,In Progress,Great product,,
+1102,2026-08-16,Laptop Pro 15-inch,1198.1,1845.97,Cancelled,Great product,,
+1103,2026-08-17,4K Monitor,298.63,487.04,Delivered,Fast shipping,,
+1104,2026-08-18,Laptop Pro 15-inch,1208.66,1805.12,Cancelled,Will buy again,,
+1105,2026-08-19,4K Monitor,287.15,452.35,Cancelled,Fast shipping,,
+1106,2026-08-20,Bluetooth Speaker,71.45,143.59,Pending,Standard delivery,,
+1107,2026-08-21,Tablet 10-inch,214.69,360.28,In Progress,Excellent quality,,
+1108,2026-08-22,Smartphone 128GB,362.4,675.94,Delivered,Will buy again,,
+1109,2026-08-22,Bluetooth Speaker,59.13,137.38,Delivered,Great product,,
+1110,2026-08-23,Mechanical Keyboard,88.46,229.4,Delivered,Excellent quality,,
+1111,2026-08-24,Smartwatch,90.61,291.71,Delivered,Client requested changes,,
+1112,2026-08-24,Laptop Pro 15-inch,1193.05,1816.7,Delivered,Will buy again,,
+1113,2026-08-25,4K Monitor,284.17,458.93,Delivered,Excellent quality,,
+1114,2026-08-26,Laptop Pro 15-inch,1206.23,1827.49,Delivered,Gift wrap requested,,
+1115,2026-08-26,Tablet 10-inch,208.58,369.07,Delivered,Excellent quality,,

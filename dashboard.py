@@ -756,7 +756,7 @@ with st.sidebar:
     )
 
     # Demo data button
-    if st.button("🍰 Load demo (orders)", width='stretch'):
+    if st.button("🛒 Load demo (orders)", width='stretch'):
         demo_path = os.path.join(os.path.dirname(__file__), "data", "orders.csv")
         if os.path.exists(demo_path):
             demo_df = pd.read_csv(demo_path)

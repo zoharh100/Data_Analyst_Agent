@@ -17,56 +17,56 @@ import os
 # ---------------------------------------------------------------------------
 MOCK_DATA_JSON = """
 [
-  {"order_id": 1001, "order_date": "2026-06-15", "product_type": "Wedding Cake - Multifloor",
-   "ingredients_cost": 120.50, "final_price": 350.00, "status": "Delivered",
-   "customer_notes": "Very impressive, should be labeled 'lower floor first'"},
-  {"order_id": 1002, "order_date": "2026-06-16", "product_type": "Birthday Cake - Chocolate",
+  {"order_id": 1001, "order_date": "2026-06-15", "product_type": "Laptop Pro 15-inch",
+   "ingredients_cost": 1200.50, "final_price": 1800.00, "status": "Delivered",
+   "customer_notes": "Great laptop, fast delivery"},
+  {"order_id": 1002, "order_date": "2026-06-16", "product_type": "Wireless Headphones",
    "ingredients_cost": 45.00, "final_price": 180.00, "status": "In Progress",
-   "customer_notes": "Urgent delivery needed, should arrive before the party starts"},
-  {"order_id": 1003, "order_date": "2026-06-17", "product_type": "Gluten Free Cake",
-   "ingredients_cost": 150.00, "final_price": 420.00, "status": "Pending",
-   "customer_notes": "Celiac, multiple egg allergies (gluten free). Delivery by 16:00."},
-  {"order_id": 1004, "order_date": "2026-06-18", "product_type": "Groom's Cake - Carrot",
-   "ingredients_cost": 90.00, "final_price": 280.00, "status": "Cancelled",
-   "customer_notes": "Client changed date due to unforeseen circumstances"},
-  {"order_id": 1005, "order_date": "2026-06-19", "product_type": "Wedding Cake - Multifloor",
-   "ingredients_cost": 135.00, "final_price": 380.00, "status": "Delivered",
-   "customer_notes": "Beautiful work, client very happy"},
-  {"order_id": 1006, "order_date": "2026-06-20", "product_type": "Birthday Cake - Vanilla",
-   "ingredients_cost": 50.00, "final_price": 190.00, "status": "Delivered",
-   "customer_notes": "Please add Happy Birthday inscription"},
-  {"order_id": 1007, "order_date": "2026-06-21", "product_type": "Groom's Cake - Chocolate",
-   "ingredients_cost": 80.00, "final_price": 260.00, "status": "In Progress",
-   "customer_notes": "Rush order, needed by evening"},
-  {"order_id": 1008, "order_date": "2026-06-22", "product_type": "Gluten Free Cake",
-   "ingredients_cost": 160.00, "final_price": 440.00, "status": "Pending",
-   "customer_notes": "Nut allergy as well, please verify ingredients"},
-  {"order_id": 1009, "order_date": "2026-06-23", "product_type": "Wedding Cake - Multifloor",
-   "ingredients_cost": 145.00, "final_price": 410.00, "status": "Delivered",
-   "customer_notes": "Client requested extra tier added last minute"},
-  {"order_id": 1010, "order_date": "2026-06-24", "product_type": "Birthday Cake - Strawberry",
-   "ingredients_cost": 55.00, "final_price": 200.00, "status": "Cancelled",
-   "customer_notes": "Client cancelled, rescheduled for next month"},
-  {"order_id": 1011, "order_date": "2026-06-25", "product_type": "Birthday Cake - Chocolate",
+   "customer_notes": "Urgent delivery needed before trip"},
+  {"order_id": 1003, "order_date": "2026-06-17", "product_type": "Smartphone 128GB",
+   "ingredients_cost": 350.00, "final_price": 620.00, "status": "Pending",
+   "customer_notes": "Please include screen protector"},
+  {"order_id": 1004, "order_date": "2026-06-18", "product_type": "Mechanical Keyboard",
+   "ingredients_cost": 90.00, "final_price": 180.00, "status": "Cancelled",
+   "customer_notes": "Client changed mind on switches"},
+  {"order_id": 1005, "order_date": "2026-06-19", "product_type": "Laptop Pro 15-inch",
+   "ingredients_cost": 1200.00, "final_price": 1800.00, "status": "Delivered",
+   "customer_notes": "Perfect for development work"},
+  {"order_id": 1006, "order_date": "2026-06-20", "product_type": "Gaming Mouse",
+   "ingredients_cost": 50.00, "final_price": 120.00, "status": "Delivered",
+   "customer_notes": "Good tracking speed"},
+  {"order_id": 1007, "order_date": "2026-06-21", "product_type": "4K Monitor",
+   "ingredients_cost": 280.00, "final_price": 450.00, "status": "In Progress",
+   "customer_notes": "Rush order, needed for home office setup"},
+  {"order_id": 1008, "order_date": "2026-06-22", "product_type": "Smartphone 128GB",
+   "ingredients_cost": 360.00, "final_price": 640.00, "status": "Pending",
+   "customer_notes": "Verify storage size before shipping"},
+  {"order_id": 1009, "order_date": "2026-06-23", "product_type": "Laptop Pro 15-inch",
+   "ingredients_cost": 1245.00, "final_price": 1850.00, "status": "Delivered",
+   "customer_notes": "Requested extra RAM upgrade last minute"},
+  {"order_id": 1010, "order_date": "2026-06-24", "product_type": "Bluetooth Speaker",
+   "ingredients_cost": 55.00, "final_price": 120.00, "status": "Cancelled",
+   "customer_notes": "Client cancelled, bought locally instead"},
+  {"order_id": 1011, "order_date": "2026-06-25", "product_type": "Wireless Headphones",
    "ingredients_cost": 48.00, "final_price": 185.00, "status": "Delivered",
-   "customer_notes": "Perfect, exactly as ordered"},
-  {"order_id": 1012, "order_date": "2026-06-26", "product_type": "Wedding Cake - Single Tier",
-   "ingredients_cost": 95.00, "final_price": 290.00, "status": "In Progress",
-   "customer_notes": "Small intimate wedding, minimalist design"},
-  {"order_id": 1013, "order_date": "2026-06-27", "product_type": "Groom's Cake - Red Velvet",
+   "customer_notes": "Excellent sound quality"},
+  {"order_id": 1012, "order_date": "2026-06-26", "product_type": "Tablet 10-inch",
+   "ingredients_cost": 195.00, "final_price": 350.00, "status": "In Progress",
+   "customer_notes": "Include stylus pen"},
+  {"order_id": 1013, "order_date": "2026-06-27", "product_type": "Smartwatch",
    "ingredients_cost": 85.00, "final_price": 270.00, "status": "Delivered",
-   "customer_notes": "Excellent quality, repeat customer"},
-  {"order_id": 1014, "order_date": "2026-06-28", "product_type": "Gluten Free Cake",
-   "ingredients_cost": 155.00, "final_price": 430.00, "status": "Pending",
+   "customer_notes": "Great build quality, repeat customer"},
+  {"order_id": 1014, "order_date": "2026-06-28", "product_type": "Smartphone 128GB",
+   "ingredients_cost": 355.00, "final_price": 630.00, "status": "Pending",
    "customer_notes": "Client confirmed pickup time 15:00"},
-  {"order_id": 1015, "order_date": "2026-06-29", "product_type": "Birthday Cake - Vanilla",
-   "ingredients_cost": 52.00, "final_price": 195.00, "status": "Delivered",
-   "customer_notes": "Child's birthday, fondant decorations requested"}
+  {"order_id": 1015, "order_date": "2026-06-29", "product_type": "Gaming Mouse",
+   "ingredients_cost": 52.00, "final_price": 125.00, "status": "Delivered",
+   "customer_notes": "Included RGB lighting is perfect"}
 ]
 """
 
 
-def load_and_prepare_data(source: str = "json") -> pd.DataFrame:
+def load_and_prepare_data(source: str = "csv") -> pd.DataFrame:
     """
     Load order data and add derived columns.
 
@@ -94,8 +94,8 @@ def load_and_prepare_data(source: str = "json") -> pd.DataFrame:
         data = json.loads(MOCK_DATA_JSON)
         df = pd.DataFrame(data)
 
-    # Convert date column to datetime
-    df["order_date"] = pd.to_datetime(df["order_date"])
+    # Convert date column to datetime with mixed format support
+    df["order_date"] = pd.to_datetime(df["order_date"], format="mixed")
 
     # --- Derived columns (used by both agent and dashboard) ---
     df["profit"] = df["final_price"] - df["ingredients_cost"]
@@ -116,6 +116,6 @@ if __name__ == "__main__":
     df = load_and_prepare_data()
     print("--- Orders (with derived columns) ---")
     print(df[["order_id", "product_type", "final_price", "profit", "profit_margin_pct", "status"]])
-    print(f"\nTotal revenue:  ₪{df['final_price'].sum():,.2f}")
-    print(f"Total profit:   ₪{df['profit'].sum():,.2f}")
+    print(f"\nTotal revenue:  ${df['final_price'].sum():,.2f}")
+    print(f"Total profit:   ${df['profit'].sum():,.2f}")
     print(f"Avg margin:     {df['profit_margin_pct'].mean():.1f}%")

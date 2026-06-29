@@ -28,7 +28,7 @@ from typing import Any
 
 import pandas as pd
 
-from agent_prompts import SYSTEM_PROMPT
+from agent_prompts import SYSTEM_PROMPT, ORDERS_SYSTEM_PROMPT
 from agent_tools import read_dataset_schema, run_python_analysis
 from data_loader import orders_df
 
@@ -585,10 +585,10 @@ def run_agent_loop(
 # Demo execution
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Bakery-specific demo: look up an order by ID
+    # Order-specific demo: look up an order by ID
     answer = run_agent_loop(
         user_input="What is the status of order 1003? Is there anything special I should know?",
-        system_prompt=BAKERY_SYSTEM_PROMPT,
+        system_prompt=ORDERS_SYSTEM_PROMPT,
         max_iterations=5,
     )
 
