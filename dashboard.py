@@ -669,7 +669,7 @@ def render_chart(chart_spec: dict, df: pd.DataFrame):
 
         if fig:
             apply_theme(fig)
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
             if chart_spec.get("description"):
                 st.caption(f"💡 {chart_spec['description']}")
         else:
@@ -702,7 +702,7 @@ def render_auto_charts(df: pd.DataFrame, roles: dict):
             )
             fig.update_coloraxes(showscale=False)
             apply_theme(fig)
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
             rendered += 1
 
     # Time series of first numeric over first date
@@ -717,7 +717,7 @@ def render_auto_charts(df: pd.DataFrame, roles: dict):
             )
             fig.update_traces(fill="tozeroy", fillcolor="rgba(167,139,250,0.12)")
             apply_theme(fig)
-            st.plotly_chart(fig, width='stretch')
+            st.plotly_chart(fig, use_container_width=True)
             rendered += 1
 
     # Histogram of first numeric
@@ -728,7 +728,7 @@ def render_auto_charts(df: pd.DataFrame, roles: dict):
             nbins=25, color_discrete_sequence=["#7c3aed"],
         )
         apply_theme(fig)
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -756,7 +756,7 @@ with st.sidebar:
     )
 
     # Demo data button
-    if st.button("🛒 Load demo (orders)", width='stretch'):
+    if st.button("🛒 Load demo (orders)", use_container_width=True):
         demo_path = os.path.join(os.path.dirname(__file__), "data", "orders.csv")
         if os.path.exists(demo_path):
             demo_df = pd.read_csv(demo_path)
@@ -918,7 +918,7 @@ if st.session_state["df"] is None:
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🍰 Try with demo orders dataset", width='stretch', type="secondary"):
+        if st.button("🍰 Try with demo orders dataset", use_container_width=True, type="secondary"):
             demo_path = os.path.join(os.path.dirname(__file__), "data", "orders.csv")
             if os.path.exists(demo_path):
                 df_demo = pd.read_csv(demo_path)
@@ -1192,7 +1192,7 @@ with tab_overview:
         summary_df = df[num_cols_list].describe().round(2).T
         summary_df.index.name = "Column"
         summary_df = summary_df.reset_index()
-        st.dataframe(summary_df, width='stretch', hide_index=True, height=250)
+        st.dataframe(summary_df, use_container_width=True, hide_index=True, height=250)
 
     # ── Category distributions ─────────────────────────────
     if cat_cols_list:
@@ -1208,7 +1208,7 @@ with tab_overview:
                 )
                 fig.update_traces(textinfo="label+percent")
                 apply_theme(fig)
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1254,7 +1254,7 @@ with tab_charts:
             text_auto=".2f", aspect="auto",
         )
         apply_theme(fig_corr)
-        st.plotly_chart(fig_corr, width='stretch')
+        st.plotly_chart(fig_corr, use_container_width=True)
 
     # Time series per numeric column (if dates exist)
     if dt_cols_list and num_cols_list:
@@ -1273,7 +1273,7 @@ with tab_charts:
             )
             fig_ts.update_traces(fill="tozeroy", fillcolor="rgba(167,139,250,0.12)")
             apply_theme(fig_ts)
-            st.plotly_chart(fig_ts, width='stretch')
+            st.plotly_chart(fig_ts, use_container_width=True)
 
     # Bar chart: numeric by category
     if cat_cols_list and num_cols_list:
@@ -1296,7 +1296,7 @@ with tab_charts:
         )
         fig_bar.update_coloraxes(showscale=False)
         apply_theme(fig_bar)
-        st.plotly_chart(fig_bar, width='stretch')
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     # Scatter / histogram of any two columns
     if len(num_cols_list) >= 2:
@@ -1314,7 +1314,7 @@ with tab_charts:
             opacity=0.7,
         )
         apply_theme(fig_sc)
-        st.plotly_chart(fig_sc, width='stretch')
+        st.plotly_chart(fig_sc, use_container_width=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1354,7 +1354,7 @@ with tab_data:
 
     display_df.columns = [c.replace("_", " ").title() for c in display_df.columns]
 
-    st.dataframe(display_df, width='stretch', height=440, hide_index=True)
+    st.dataframe(display_df, use_container_width=True, height=440, hide_index=True)
 
     dl_data = df.to_csv(index=False).encode("utf-8")
     st.download_button(
@@ -1376,7 +1376,7 @@ with tab_data:
                 "Missing": f"{df_raw[c].isnull().sum()} ({df_raw[c].isnull().mean()*100:.1f}%)",
                 "Sample": str(df_raw[c].dropna().iloc[0]) if len(df_raw[c].dropna()) > 0 else "—",
             })
-        st.dataframe(pd.DataFrame(col_info), width='stretch', hide_index=True)
+        st.dataframe(pd.DataFrame(col_info), use_container_width=True, hide_index=True)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1520,7 +1520,7 @@ with tab_debug:
         roles_df = pd.DataFrame(
             [{"Column": c, "Role": r} for c, r in roles.items()]
         )
-        st.dataframe(roles_df, width='stretch', hide_index=True)
+        st.dataframe(roles_df, use_container_width=True, hide_index=True)
 
     if analysis.get("__trace__"):
         st.markdown("**Agent Reasoning Trace**")
