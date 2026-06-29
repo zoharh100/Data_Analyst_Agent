@@ -237,11 +237,12 @@ def infer_column_roles(df: pd.DataFrame) -> dict:
     """
     roles = {}
     for col in df.columns:
-        dtype = str(df[col].dtype)
+        # Use .name if available (e.g. 'object', 'int64', 'datetime64[ns]'), fallback to str()
+        dtype = getattr(df[col].dtype, 'name', str(df[col].dtype)).lower()
         nuniq = df[col].nunique()
         n = len(df)
 
-        if "datetime" in dtype or "date" in dtype:
+        if "datetime" in dtype or "date" in dtype or "time" in dtype:
             roles[col] = "datetime"
         elif "int" in dtype or "float" in dtype:
             # heuristic: very low nunique int → probably a category/id
@@ -259,7 +260,11 @@ def infer_column_roles(df: pd.DataFrame) -> dict:
         elif "bool" in dtype:
             roles[col] = "category"
         else:
-            roles[col] = "other"
+            # Fallback for unrecognized types: assume text/category based on cardinality
+            if nuniq <= 30:
+                roles[col] = "category"
+            else:
+                roles[col] = "text"
     return roles
 
 
