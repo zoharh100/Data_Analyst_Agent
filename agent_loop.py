@@ -66,7 +66,7 @@ AVAILABLE_TOOLS: dict = {
 # ---------------------------------------------------------------------------
 import time
 
-_GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.0-flash"]
+_GEMINI_MODEL_CHAIN = ["gemini-2.5-flash", "gemini-2.5-flash-lite-preview-06-17", "gemini-1.5-flash"]
 _last_llm_error = ""
 _used_simulator = False
 
@@ -95,8 +95,15 @@ def call_llm_api(messages: list[dict], model_name: str = "") -> dict:
         result, last_error = _call_universal_llm(messages, model, api_key)
         if result is not None:
             return result
+        # Stop immediately on auth/key errors — retrying other models won't help
         if _is_key_error(last_error):
             break
+        # On quota/rate-limit errors, try the next model in chain
+        # (other models may have separate quotas)
+        err_lower = last_error.lower()
+        if "429" in err_lower or "quota" in err_lower or "resource_exhausted" in err_lower or "rate limit" in err_lower:
+            print(f"[WARN] Model {model} quota/rate-limited, trying next model...")
+            continue
 
     _last_llm_error = last_error
     _used_simulator = True
@@ -133,7 +140,7 @@ def _call_universal_llm(messages: list[dict], model_name: str, api_key: str):
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
         
-        max_retries = 3
+        max_retries = 2
         for attempt in range(max_retries):
             try:
                 response = litellm.completion(
@@ -145,13 +152,20 @@ def _call_universal_llm(messages: list[dict], model_name: str, api_key: str):
                 )
                 return _parse_react_response(response.choices[0].message.content), ""
             except Exception as e:
-                err_str = str(e).lower()
-                if "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource_exhausted" in err_str:
-                    if "per minute" in err_str or "rate_limit" in err_str:
-                        if attempt < max_retries - 1:
-                            print(f"[WARN] Rate limited. Retrying in 15 seconds... (Attempt {attempt+1}/{max_retries})")
-                            time.sleep(15)
-                            continue
+                err_str = str(e)
+                err_lower = err_str.lower()
+                is_rate_limit = "429" in err_lower or "quota" in err_lower or "rate limit" in err_lower or "resource_exhausted" in err_lower
+                is_per_minute = "per minute" in err_lower or "rate_limit" in err_lower or "requests per minute" in err_lower
+                
+                if is_rate_limit and is_per_minute and attempt < max_retries - 1:
+                    # Try to parse the retry delay from the error message
+                    delay_match = re.search(r'retry.*?(\d+)(?:\.\d+)?s', err_lower)
+                    delay = int(delay_match.group(1)) + 2 if delay_match else 45
+                    delay = min(delay, 60)  # cap at 60s
+                    print(f"[WARN] Rate limited (per-minute). Retrying in {delay}s... (Attempt {attempt+1}/{max_retries})")
+                    time.sleep(delay)
+                    continue
+                # For per-day quota or any other error, don't retry — fall through to next model
                 raise e
     except Exception as e:
         return None, str(e)

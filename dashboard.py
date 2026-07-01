@@ -511,12 +511,31 @@ def run_full_analysis(file_path: str, file_hash: int) -> dict:
             parsed["__used_simulator__"] = llm_status.get("used_simulator", False)
             return parsed
 
-    # Fallback: the LLM returned free text — wrap it so the dashboard still shows something
-    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', raw_answer.strip()) if s.strip()]
+    # Fallback: the LLM returned free text — strip ReAct markers and wrap it
+    def _strip_react_markers(text: str) -> str:
+        """Remove Thought/Action/Action Input/Observation lines from raw LLM output."""
+        lines = text.splitlines()
+        clean = []
+        skip_next = False
+        for line in lines:
+            stripped = line.strip()
+            # Skip ReAct protocol lines
+            if re.match(r'^(Thought|Action|Action Input|Observation|Final Answer)\s*:', stripped, re.I):
+                skip_next = False
+                continue
+            # Skip temp file paths
+            if re.match(r'^[A-Za-z]:\\.*\.csv$', stripped) or re.match(r'^/tmp/.*\.csv$', stripped):
+                continue
+            clean.append(line)
+        return '\n'.join(clean).strip()
+
+    clean_text = _strip_react_markers(raw_answer)
+    sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', clean_text) if s.strip()]
     findings = sentences[:8] if sentences else [raw_answer[:600]]
+    summary = clean_text[:500] if clean_text else "Analysis complete."
     return {
         "dataset_name": "Loaded Dataset",
-        "summary": raw_answer[:500] if raw_answer else "Analysis complete.",
+        "summary": summary,
         "shape": {"rows": 0, "columns": 0},
         "column_types": {},
         "kpis": [],
@@ -1112,7 +1131,17 @@ if analysis.get("__used_simulator__"):
         st.info("ℹ️ No API key configured — showing results from the built-in BI simulator.")
 
 # ── Summary banner ──────────────────────────────────────────
-summary_text = analysis.get("summary", "")
+def _clean_summary(text: str) -> str:
+    """Remove any leftover ReAct trace markers from a summary string."""
+    if not text:
+        return ""
+    lines = text.splitlines()
+    clean = [l for l in lines if not re.match(
+        r'^\s*(Thought|Action|Action Input|Observation|Final Answer)\s*:', l, re.I
+    ) and not re.match(r'^\s*[A-Za-z]:\\.*\.csv', l)]
+    return ' '.join(' '.join(clean).split())  # collapse whitespace
+
+summary_text = _clean_summary(analysis.get("summary", ""))
 if summary_text:
     st.markdown(
         f'<div class="insight-block" style="border-left-color:#a78bfa;">'
